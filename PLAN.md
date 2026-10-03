@@ -18,12 +18,12 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 | Task | What to do | For | Time |
 |---|---|---|---|
-| U3 | Decisions (defaults apply if unanswered), see U3 below | S1.1 | 5 min |
+| – | Nothing pending (U3 answered 2026-10-03) | – | – |
 
 ## Status
 
 - **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK).
-- **Next:** S1.1 (Opus). Your tasks: **User to-do** above.
+- **Next:** S1.1 (Opus). No user tasks pending. Decisions D1–D4 below are binding.
 - Escalation rule: a subtask that fails twice on Sonnet → new Opus session with a 5-line note
   (symptom, file, what was tried). Never carry an old transcript over.
 
@@ -65,7 +65,7 @@ window size. The CGA path stays as the authentic mode (`--classic`, or toggled i
 |---|---|---|---|---|
 | S1.1 | Design: display-list format and recording points in the natives (`raster.h` lines, `fill_rows`/horizon, `textdraw.h`, `panel.h` sprites/needles, scenery dots); sub-pixel coordinates from the projection before rounding; `docs/RENDER.md`; no code beyond a skeleton in `src/enhanced/` | O | M | |
 | S1.2 | 3D view display list: record scenery lines/dots/polygons and horizon with float coordinates; `--dump-dl` to a text file per frame for checks | S | M | |
-| S1.3 | SDL back end for the 3D view: lines (`SDL_RenderLines`, thickness option), filled sky/ground and polygons (`SDL_RenderGeometry`), composite-equivalent palette; toggle authentic/sharp (F11 cycles with composite/RGB); **U1 check** | S | M | |
+| S1.3 | SDL back end for the 3D view: lines (`SDL_RenderLines`, thickness option), filled sky/ground and polygons (`SDL_RenderGeometry`), slightly richer palette than the 4 composite colours (minor adjustments for clarity only, D1); toggle authentic/sharp (F11 cycles with composite/RGB); **U1 check** | S | M | |
 
 ### Phase 2 — Panel and text
 | Id | Task | Model | Size | Status |
@@ -76,7 +76,7 @@ window size. The CGA path stays as the authentic mode (`--classic`, or toggled i
 ### Phase 3 — View
 | Id | Task | Model | Size | Status |
 |---|---|---|---|---|
-| S3.1 | Widescreen / aspect: extend the horizontal field of view (projection scale and clip planes in `transform.c`, as a side channel), panel layout for 16:9; options 4:3 / 16:10 / 16:9; **U1 check** | O | M | |
+| S3.1 | ~~Widescreen~~ dropped (D3): keep 4:3, letterbox/pillarbox at any window size, integer or smooth scaling option | S | S | dropped 2026-10-03 |
 | S3.2 | Smooth frame rate: run the simulation at the original rates, render the 3D view every display frame with interpolated eye position/attitude from the display list; no sim behaviour change | O | L | |
 
 ### Phase 4 — Input
@@ -89,7 +89,7 @@ window size. The CGA path stays as the authentic mode (`--classic`, or toggled i
 | Id | Task | Model | Size | Status |
 |---|---|---|---|---|
 | S5.1 | Settings and save state: `fs1.ini` (display mode, aspect, scale, audio, controls), F5/F9 quick save/load of the whole game state (memory array + registers) | S | M | |
-| S5.2 | Launcher "FS1 Enhanced" from `../StreetRodEnhanced/launcher/` (wxWidgets), adapted: disk image instead of a game folder, the options of S1–S5.1, key bindings; built by default, `-DFS1_LAUNCHER=OFF` to skip | S | M | |
+| S5.2 | Launcher "FS1 Enhanced" (required, like the other ports) from `../StreetRodEnhanced/launcher/` (wxWidgets), adapted: disk image instead of a game folder, all options of S1–S5.1 (palette, scaling, smooth frame rate, gamepad, audio), key bindings; no "classic" entry (D2); built by default, `-DFS1_LAUNCHER=OFF` to skip | S | M | |
 | S5.3 | First release: `tools/package.py` (repo URL, launcher in the zip), README with screenshots taken by the user, CHANGELOG, make https://github.com/kylofon/fs1-enhanced public + GitHub release (user approves) | H | S | |
 
 Notes:
@@ -120,16 +120,21 @@ Files: work\bugs\<n>.png
 ```
 Several bugs in one message; one session then fixes them in a batch.
 
-### U3 — Decisions (answer when convenient; defaults apply otherwise)
-1. **Sharp mode colours**: the four composite colours exactly (default), or a richer palette?
-2. **Default mode at start**: sharp (default in this repo; `--classic` or F11 for authentic) or authentic?
-3. **Widescreen**: extend the field of view (default) or stretch?
-4. **Release numbering**: v0.1.0 like the other Enhanced repos (default), or v1.0?
+### U3 — Decisions: answered 2026-10-03, see Decisions D1–D4
 
 ## Decisions
 - 2026-10-03: separate Enhanced repo (faithful U6.1 answered by the workflow: faithful first, Enhanced
   after its release).
 - 2026-10-03: GitHub repo https://github.com/kylofon/fs1-enhanced created, private until the first release.
+
+- 2026-10-03 (U3 answers):
+  - D1 Palette: richer than the four composite colours, but only enough for minor adjustments and clarity. Nothing fancy.
+  - D2 Enhanced is standalone: it never launches as the original. Default and only user-facing mode is sharp;
+    the launcher has no "classic" option. `--classic` stays as a developer/verification flag only
+    (required by the byte-identical gate), undocumented for players.
+  - D3 No widescreen (S3.1 dropped); 4:3 kept, scaled to the window.
+  - D4 First release is v0.1.0.
+  - The game needs a launcher for its options, like the other ports (S5.2).
 
 ## TODO (parked)
 - [ ] Linux/macOS builds and CI.

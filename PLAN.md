@@ -18,7 +18,7 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 | Task | What to do | For | Time |
 |---|---|---|---|
-| U1 | S1.3 sharp 3D view: run `builds1-enhanced.exe` (sharp is the default) next to `--classic`, fly (A, B at the menus) and compare the 3D view; or open `work\sharp_650.bmp` vs `work\classic_650.bmp`. Reply `OK` or what is wrong and where (colours, line thickness `--line-width N`, runway/ground fills, blurry patches) | S1.3 | 5 min |
+| U1 | S1.3 sharp 3D view: close the running game, `cmake --build build`, run `builds1-enhanced.exe` (sharp is the default) next to `--classic`, fly (A, B at the menus) and compare the 3D view; or open `work\sharp_650.bmp` vs `work\classic_650.bmp`. Reply `OK` or what is wrong and where (colours, line thickness `--line-width N`, runway/ground fills, blurry patches) | S1.3 | 5 min |
 
 ## Status
 

@@ -23,7 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 MINGW = Path(os.environ.get("MINGW_PREFIX_WIN", r"C:\msys64\mingw64"))
 PACMAN_DB = MINGW.parent / "var" / "lib" / "pacman" / "local"
-REPO_URL = "https://github.com/kylofon/fs1-sdl3-port"
+REPO_URL = "https://github.com/kylofon/fs1-enhanced"
 
 # Licence files shipped per MSYS2 package (source under mingw64/share/licenses/<dir>).
 LICENSES = {

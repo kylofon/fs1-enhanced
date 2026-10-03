@@ -126,6 +126,7 @@ void pc_key_event(Pc *pc, uint8_t scancode);
 
 /* Renders the current CGA screen into CGA_W x CGA_H XRGB8888 pixels. */
 void pc_render_cga(const Pc *pc, uint32_t *pixels);
+uint32_t pc_composite_rgb(int phase, int pattern); /* ENH: sharp renderer */
 
 /* Generates mono float samples for cycles [slice_start, cpu.cycles) and starts a new slice.
  * Returns the number of samples written (at most max_samples). */

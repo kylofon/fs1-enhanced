@@ -36,6 +36,7 @@
 
 #include "native.h"
 #include "game/state.h"
+#include "enhanced/displaylist.h" /* ENH: display list */
 #include "mainloop_cycles.h"
 
 #define REG(r) (pc->cpu.regs[R_##r])
@@ -318,11 +319,15 @@ static bool n_draw_view_frame(Pc *pc)
         return false;
     if (draw) {
         uint16_t es = gs_view_buf_seg(pc);
+        dl_fill_bytes(pc, es, 0, 0x50, 0, 0xFF); /* ENH: display list */
         for (uint16_t di = 0; di < 0x50; di += 2)
             mem_write16(pc, es, di, 0);
+        dl_fill_bytes(pc, es, 0x1090, 0x50, 0, 0xFF); /* ENH: display list */
         for (uint16_t di = 0x1090; di < 0x10E0; di += 2)
             mem_write16(pc, es, di, 0);
         for (int bx = 0x1090; bx >= 0; bx -= 0x50) {
+            dl_fill_bytes(pc, es, (uint16_t)bx, 1, 0xF0, 0xF0); /* ENH: display list */
+            dl_fill_bytes(pc, es, (uint16_t)(bx + 0x2000), 1, 0xF0, 0xF0); /* ENH: display list */
             uint32_t a = cpu_linear(es, (uint16_t)bx), b = cpu_linear(es, (uint16_t)(bx + 0x2000));
             cpu_write8(&pc->cpu, a, (uint8_t)(cpu_read8(&pc->cpu, a) | 0xF0));
             cpu_write8(&pc->cpu, b, (uint8_t)(cpu_read8(&pc->cpu, b) | 0xF0));
@@ -445,9 +450,11 @@ static uint64_t overlay_body(Pc *pc, bool commit)
             cx = (uint16_t)(si >> 8);
             ax = fill;
             cyc += row_cyc + rep_stos(0x071D, cx);
-            if (commit)
+            if (commit) {
+                dl_fill_bytes(pc, es, di, cx, (uint8_t)ax, 0xFF); /* ENH: display list */
                 for (uint16_t k = 0; k < cx; k++)
                     cpu_write8(&pc->cpu, cpu_linear(es, (uint16_t)(di + k)), (uint8_t)ax);
+            }
             di = (uint16_t)(di + cx);
             cx = 0;
             bp--;

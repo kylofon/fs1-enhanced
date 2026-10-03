@@ -23,6 +23,7 @@
 
 #include "native.h"
 #include "game/state.h"
+#include "enhanced/displaylist.h" /* ENH: display list */
 
 
 
@@ -400,6 +401,7 @@ static void f_4D56(void)
     CY(MOV_RR);
     wr16(0x3165, rCX);
     CY(MOV_MR);
+    dl_stage_p2(P, rSI, rCX); /* ENH: display list */
     CY(TEST_MI);
     if (!J(gs_capture_mode(P) == 0)) {
         rBX = gs_capture_ptr(P);
@@ -407,6 +409,7 @@ static void f_4D56(void)
         wr16(rBX, rSI);
         wr16((uint16_t)(rBX + 2), rCX);
         CY(2 * MOV_MR);
+        dl_capture(P, rBX); /* ENH: display list */
         gs_set_capture_ptr(P, (uint16_t)(rd16(GS_CAPTURE_PTR) + 4));
         CY(ALU_MI);
         ret_();
@@ -436,6 +439,7 @@ static void f_4D18(void)
     CY(MOV_RR);
     rSI = rCX;
     CY(MOV_RR);
+    dl_stage_p1(P, false, rSI); /* ENH: display list */
     f_4D56();
 }
 
@@ -446,6 +450,7 @@ static void f_4CA3(void)
     CY(MOV_RM);
     rSI = rCX;
     CY(MOV_RR);
+    dl_stage_p1(P, true, rSI); /* ENH: display list */
     CY(JMP);
     f_4D56();
 }
@@ -1378,6 +1383,7 @@ static void h_dotted(void)
 /* 2F poly_begin (44FB) */
 static void h_poly_begin(void)
 {
+    dl_poly_begin(P); /* ENH: display list */
     gs_set_poly_mode(P, 1);
     gs_set_poly_edges_w(P, 0, 0);
     wr16(0x3734, 0);
@@ -1432,6 +1438,7 @@ L59E3:
     if (J(rBX == rd16(0x1F40)))
         goto L59DF;
 L59E9:
+    dl_span_fill(P); /* ENH: display list */
     rSI = rBX;
     rDI = rBX;
     CY(2 * MOV_RR + JMP);
@@ -1834,6 +1841,7 @@ static void h_poly_end(void)
         if (!J(gs_radar_view(P) == 1))
             call_int(0x549A, f_poly_fill);
     }
+    dl_poly_end(P); /* ENH: display list */
     ret_();
 }
 

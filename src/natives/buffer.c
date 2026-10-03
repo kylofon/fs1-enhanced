@@ -10,6 +10,7 @@
  * the flags are still left as the original leaves them. */
 #include "native.h"
 #include "game/state.h"
+#include "enhanced/displaylist.h" /* ENH: display list */
 
 #define ROW_OFFSETS 0x380C
 
@@ -68,6 +69,7 @@ static void n_clear_view_buffer(Pc *pc)
     uint16_t words = gs_clear_words(pc);
     c->sregs[S_ES] = gs_view_buf_seg(pc);
     c->regs[R_AX] = gs_clear_pattern(pc);
+    dl_fill_view(pc, c->regs[R_AX], words); /* ENH: display list */
     logic_flags(c, 0, true);
     c->regs[R_DI] = 0;
     c->regs[R_CX] = words;
@@ -88,6 +90,7 @@ static void n_blit_view_to_screen(Pc *pc)
 {
     Cpu8086 *c = &pc->cpu;
     uint16_t ds = c->sregs[S_DS];
+    dl_commit_view(pc); /* ENH: display list */
     cpu_push(c, ds);
     uint16_t n1 = gs_blit_words0(pc);
     c->regs[R_CX] = n1;
@@ -121,6 +124,7 @@ static void plot_pixel(Pc *pc)
     uint16_t row = (uint16_t)((c->regs[R_CX] & 0xFF) << 1);
     uint16_t off = (uint16_t)((x >> 1) + mem_read16(pc, ds, (uint16_t)(row + ROW_OFFSETS)));
     uint32_t a = cpu_linear(es, off);
+    dl_dot(pc, x, c->regs[R_CX] & 0xFF, es); /* ENH: display list */
     uint8_t al = cpu_read8(c, a);
     if (x & 1) {
         al = (uint8_t)((al & 0xF0) | cpu_read8(c, cpu_linear(ds, GS_DRAW_COLOUR)));
@@ -160,6 +164,7 @@ static void n_fill_rows(Pc *pc)
 {
     Cpu8086 *c = &pc->cpu;
     uint16_t ds = c->sregs[S_DS];
+    dl_fill_rows(pc, (uint8_t)c->regs[R_BX], (uint8_t)c->regs[R_DX], c->regs[R_BP], c->sregs[S_ES]); /* ENH: display list */
     uint8_t bl = (uint8_t)c->regs[R_BX];
     uint8_t dl = (uint8_t)((uint8_t)c->regs[R_DX] - bl + 2);
     uint16_t bx = (uint16_t)(bl << 1);

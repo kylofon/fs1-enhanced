@@ -825,6 +825,14 @@ static void build_composite_lut(void)
     composite_lut_ready = true;
 }
 
+/* ENH: sharp renderer: the composite decode of one pixel (phase = x & 3, pattern = 4-pixel window). */
+uint32_t pc_composite_rgb(int phase, int pattern)
+{
+    if (!composite_lut_ready)
+        build_composite_lut();
+    return composite_lut[phase & 3][pattern & 15];
+}
+
 static int hires_pixel(const uint8_t *row, int x)
 {
     if (x < 0 || x >= 640)

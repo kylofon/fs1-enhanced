@@ -18,12 +18,12 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 | Task | What to do | For | Time |
 |---|---|---|---|
-| – | Nothing pending (U3 answered 2026-10-03) | – | – |
+| U1 | S1.3 sharp 3D view: run `builds1-enhanced.exe` (sharp is the default) next to `--classic`, fly (A, B at the menus) and compare the 3D view; or open `work\sharp_650.bmp` vs `work\classic_650.bmp`. Reply `OK` or what is wrong and where (colours, line thickness `--line-width N`, runway/ground fills, blurry patches) | S1.3 | 5 min |
 
 ## Status
 
-- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`).
-- **Next:** S1.2 (Sonnet). No user tasks pending. Decisions D1–D4 below are binding.
+- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending).
+- **Next:** U1 check of S1.3, then S2.1. No user tasks pending. Decisions D1–D4 below are binding.
 - Escalation rule: a subtask that fails twice on Sonnet → new Opus session with a 5-line note
   (symptom, file, what was tried). Never carry an old transcript over.
 
@@ -64,8 +64,8 @@ window size. The CGA path stays as the authentic mode (`--classic`, or toggled i
 | Id | Task | Model | Size | Status |
 |---|---|---|---|---|
 | S1.1 | Design: display-list format and recording points in the natives (`raster.h` lines, `fill_rows`/horizon, `textdraw.h`, `panel.h` sprites/needles, scenery dots); sub-pixel coordinates from the projection before rounding; `docs/RENDER.md`; no code beyond a skeleton in `src/enhanced/` | O | M | done 2026-10-03 |
-| S1.2 | 3D view display list: record scenery lines/dots/polygons and horizon with float coordinates; `--dump-dl` to a text file per frame for checks | S | M | |
-| S1.3 | SDL back end for the 3D view: lines (`SDL_RenderLines`, thickness option), filled sky/ground and polygons (`SDL_RenderGeometry`), slightly richer palette than the 4 composite colours (minor adjustments for clarity only, D1); toggle authentic/sharp (F11 cycles with composite/RGB); **U1 check** | S | M | |
+| S1.2 | 3D view display list: record scenery lines/dots/polygons and horizon with float coordinates; `--dump-dl` to a text file per frame for checks | S | M | done 2026-10-03 |
+| S1.3 | SDL back end for the 3D view: lines (`SDL_RenderLines`, thickness option), filled sky/ground and polygons (`SDL_RenderGeometry`), slightly richer palette than the 4 composite colours (minor adjustments for clarity only, D1); toggle authentic/sharp (F11 cycles with composite/RGB); **U1 check** | S | M | done 2026-10-03, U1 pending |
 
 ### Phase 2 — Panel and text
 | Id | Task | Model | Size | Status |
@@ -110,8 +110,20 @@ Notes:
   through a per-tile CGA fallback (owner/expect shadow of B800), so a missing hook is blurry, never
   wrong. `--dl-check` (S1.2) proves the hook list complete.
 
-## User tasks
+- S1.2: recorder and hooks in `displaylist.c`; `--dump-dl FILE`, `--dl-check` ("every back-buffer write was
+  recorded" in a flight run; the polygon fill-vs-outline report lists 12 of 36 polys, e.g. a 82 vs 69 px box).
+- S1.3: `src/enhanced/sharp.{c,h}`. The CGA texture is drawn as before, then the committed view list is
+  drawn over the view rows as one `SDL_RenderGeometry` batch (fills, sky/ground split by the horizon line,
+  ear-clipped polygons, lines as quads of `--line-width N` output pixels (default 2; 0 = `SDL_RenderLine`
+  hairlines), dots) clipped to the view. Colours: a pattern decoded through the composite NTSC LUT
+  (`pc_composite_rgb`) and averaged, +20% saturation (D1). Per scan-line tiles of 16 px whose B800 bytes no
+  longer equal the blit snapshot (`dl_view_snap`) are redrawn from the CGA texture. F11: sharp → composite →
+  RGB (`--classic` keeps composite/RGB). Sharp needs the composite monitor and CGA mode 1A. `--rgb`,
+  `--classic`, `--verify`, `--native-off` start with sharp off (recording off). Screenshots (`--screenshot`)
+  in sharp mode are the window picture. Verified: `verify_campaign.py` OK, flight run cycles identical to
+  `--classic` (56353233), `--dl-check` clean. Exe locked while the game runs: build to another dir.
 
+## User tasks
 ### U1 — Visual checks (when an agent asks)
 Run the build, or open the screenshot the agent names, next to the authentic mode (`--classic`), and
 reply in one line: `OK`, or what is wrong and where (e.g. "runway lines 2 px too far left", "panel

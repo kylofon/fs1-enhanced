@@ -22,6 +22,7 @@
 #include "native.h"
 #include "game/state.h"
 #include "raster.h"
+#include "enhanced/displaylist.h" /* ENH: display list */
 
 #define ROW_OFFSETS 0x380C
 #define SCENERY_INTERP 0x3CC0
@@ -142,6 +143,7 @@ static void call_scenery_interp(Pc *pc, uint16_t sp, uint16_t ret_ip)
  * included). */
 static void fill_rows_body(Pc *pc)
 {
+    dl_fill_rows(pc, LO(BX), LO(DX), REG(BP), SREG(ES)); /* ENH: display list */
     uint8_t bl = LO(BX);
     uint8_t dl = (uint8_t)(LO(DX) - bl + 2);
     uint16_t bx = (uint16_t)(bl << 1);
@@ -305,7 +307,7 @@ static void bands(Pc *pc, uint16_t sp, uint16_t top, uint16_t bottom, uint16_t r
 }
 
 /* sp = SP at entry (the return address on top). */
-static void horizon_fill_body(Pc *pc, uint16_t sp)
+static void horizon_fill_main(Pc *pc, uint16_t sp)
 {
     SREG(ES) = REG(AX) = gs_view_buf_seg(pc);
     uint8_t bl = (uint8_t)(((uint8_t)(gs_view_angles_b(pc, 5) + 0x10) >> 4) & 0x0E);
@@ -420,6 +422,13 @@ static void horizon_fill_body(Pc *pc, uint16_t sp)
         cyc += 6 + 18 + 18;
     }
     bands(pc, sp, 0x1D40, 0x1D46, 0x2C3B, 0x2C53, 0x2C67);
+}
+
+static void horizon_fill_body(Pc *pc, uint16_t sp) /* ENH: display list wrapper around horizon_fill_main */
+{
+    dl_sky_begin(pc);
+    horizon_fill_main(pc, sp);
+    dl_sky_ground(pc);
 }
 
 /* ---- draw_horizon_list (0050:408C, native in line.c) --------------------------------- */
@@ -780,6 +789,7 @@ static void radar_clear_body(Pc *pc, uint16_t sp)
     uint16_t words = gs_clear_words(pc);
     SREG(ES) = gs_view_buf_seg(pc);
     REG(AX) = gs_clear_pattern(pc);
+    dl_fill_view(pc, REG(AX), words); /* ENH: display list */
     cyc += 21 + 11 + 17 + 5 + 12 + 4 + 17 + 20;
     REG(DI) = 0;
     REG(CX) = words;
@@ -790,6 +800,14 @@ static void radar_clear_body(Pc *pc, uint16_t sp)
     /* push ds; mov ds,[3806]; five words; pop ds */
     vpush(pc, &s, SREG(DS));
     uint16_t buf = gs_view_buf_seg(pc);
+    if (dl_on) { /* ENH: display list: the five marks as byte spans */
+        static const uint16_t mk[5][2] = { { 0x07F7, 0x4001 }, { 0x27F7, 0x7F7F }, { 0x0847, 0x4001 },
+                                           { 0x2847, 0x4001 }, { 0x0897, 0x7007 } };
+        for (int i = 0; i < 5; i++) {
+            dl_fill_bytes(pc, buf, mk[i][0], 1, (uint8_t)mk[i][1], 0xFF);
+            dl_fill_bytes(pc, buf, (uint16_t)(mk[i][0] + 1), 1, (uint8_t)(mk[i][1] >> 8), 0xFF);
+        }
+    }
     wr16(pc, buf, 0x07F7, 0x4001);
     wr16(pc, buf, 0x27F7, 0x7F7F);
     wr16(pc, buf, 0x0847, 0x4001);

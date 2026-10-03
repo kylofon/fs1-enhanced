@@ -7,6 +7,7 @@
  * on the flags these routines leave, so no flag_mask is declared. */
 #include "native.h"
 #include "game/state.h"
+#include "enhanced/displaylist.h" /* ENH: display list */
 
 #include <SDL3/SDL.h>
 
@@ -562,6 +563,7 @@ static void project(Pc *pc, uint16_t x, uint16_t y, uint16_t z)
     uint16_t sy = project_axis(y, z, gs_proj_params_b(pc, 1), gs_proj_params_b(pc, 3), &rem);
     uint16_t cx = (uint16_t)((y & 0xFF00) | hi8(sy));
     uint16_t sx = project_axis(x, z, gs_proj_params_b(pc, 0), gs_proj_params_b(pc, 2), &rem);
+    dl_stage_dot(pc, x, y, z, hi8(sx), hi8(sy)); /* ENH: display list */
     c->regs[R_AX] = sx;
     c->regs[R_DX] = rem;
     if (!gs_capture_mode(pc)) {

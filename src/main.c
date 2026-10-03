@@ -52,6 +52,7 @@
 #include "pc.h"
 #include "game/state.h"
 #include "enhanced/enhanced.h"   /* ENH: options */
+#include "enhanced/sharp.h"      /* ENH: sharp renderer */
 
 #define WINDOW_W 960
 #define WINDOW_H 720
@@ -67,6 +68,7 @@ typedef struct App {
     float samples[AUDIO_RATE / 5];
     Disk disk;
     Pc *pc;
+    SDL_Surface *sharp_shot; /* ENH: last sharp frame read back for --screenshot */
 
     uint64_t last_ticks;
     /* Emulated-time target. Kept absolute so that when a long native step overshoots a
@@ -227,8 +229,27 @@ static void dump_memory(App *app)
         SDL_Log("Memory dump failed: %s", SDL_GetError());
 }
 
+/* ENH: true when this frame ends at a screenshot (or the last frame, saved at quit). */
+static bool shot_due(const App *app)
+{
+    long next = app->frame + 1;
+    if (app->screenshot && app->max_frames && next >= app->max_frames)
+        return true;
+    for (int i = 0; i < app->shot_count; i++)
+        if (app->shot_at[i] == next)
+            return true;
+    return false;
+}
+
 static void save_screenshot(App *app, const char *path)
 {
+    if (enh.sharp && app->sharp_shot) { /* ENH: the window picture of the sharp renderer */
+        if (SDL_SaveBMP(app->sharp_shot, path))
+            SDL_Log("Screenshot saved to %s", path);
+        else
+            SDL_Log("Screenshot failed: %s", SDL_GetError());
+        return;
+    }
     SDL_Surface *s = SDL_CreateSurfaceFrom(CGA_W, CGA_H, SDL_PIXELFORMAT_XRGB8888, app->pixels,
                                            CGA_W * (int)sizeof(uint32_t));
     if (s && SDL_SaveBMP(s, path))
@@ -592,6 +613,7 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[])
     pc_boot(app->pc);
     if (app->start_rgb)
         app->pc->composite = false;
+    enh_start(app->start_rgb); /* ENH: sharp view on unless --classic / --rgb / original code */
 
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)) {
         SDL_Log("SDL_Init failed: %s", SDL_GetError());
@@ -640,7 +662,7 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event)
         return SDL_APP_SUCCESS;
     case SDL_EVENT_KEY_DOWN:
         if (event->key.scancode == SDL_SCANCODE_F11) {
-            if (!event->key.repeat) {
+            if (!event->key.repeat && !enh_cycle_monitor(&app->pc->composite)) { /* ENH: sharp / composite / RGB */
                 app->pc->composite = !app->pc->composite;
                 SDL_Log("Monitor: %s", app->pc->composite ? "composite" : "RGB");
             }
@@ -778,6 +800,12 @@ SDL_AppResult SDL_AppIterate(void *appstate)
     SDL_SetRenderDrawColor(app->renderer, 0, 0, 0, 255);
     SDL_RenderClear(app->renderer);
     SDL_RenderTexture(app->renderer, app->screen, NULL, NULL);
+    if (enh.sharp)                                                      /* ENH: sharp 3D view */
+        sharp_view(app->renderer, pc, app->screen);
+    if (enh.sharp && shot_due(app)) {                                   /* ENH: screenshot of the sharp output */
+        SDL_DestroySurface(app->sharp_shot);
+        app->sharp_shot = SDL_RenderReadPixels(app->renderer, NULL);
+    }
     SDL_RenderPresent(app->renderer);
 
     app->frame++;

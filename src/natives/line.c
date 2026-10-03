@@ -6,6 +6,7 @@
 #include <stdbool.h>
 
 #include "native.h"
+#include "enhanced/displaylist.h" /* ENH: display list */
 #include "game/state.h"
 #include "raster.h"
 
@@ -993,6 +994,7 @@ static void draw_line_cpu(Pc *pc, uint16_t ret_sp)
     RasterBus rb = { &bus, bus_buf_rd, bus_buf_wr, bus_dat_rd, bus_dat_wr, bus_call };
     RasterRegs r = { c->regs[R_AX], c->regs[R_BX], c->regs[R_CX], c->regs[R_DX],
                      c->regs[R_SI], c->regs[R_DI], c->regs[R_BP] };
+    dl_line(pc, r.bx, r.bp, r.si, r.di, bus.buf); /* ENH: display list */
     c->sregs[S_DS] = bus.buf;
     c->sregs[S_ES] = bus.dat;
     if (poly)
@@ -1038,6 +1040,7 @@ static void n_draw_line_list(Pc *pc)
         c->regs[R_SI] = cx & 0xFF;
         c->regs[R_DI] = cx >> 8;
         c->regs[R_AX] = cx >> 8;
+        dl_stage_from_capture(pc, bx); /* ENH: display list */
         mem_write16(pc, c->sregs[S_SS], (uint16_t)(sp - 2), 0x40B9); /* call draw_line */
         draw_line_cpu(pc, (uint16_t)(sp - 2));
         c->regs[R_AX] = 0;

@@ -90,7 +90,7 @@ window size. The CGA path stays as the authentic mode (`--classic`, or toggled i
 |---|---|---|---|---|
 | S5.1 | Settings and save state: `fs1.ini` (display mode, aspect, scale, audio, controls), F5/F9 quick save/load of the whole game state (memory array + registers) | S | M | |
 | S5.2 | Launcher "FS1 Enhanced" from `../StreetRodEnhanced/launcher/` (wxWidgets), adapted: disk image instead of a game folder, the options of S1–S5.1, key bindings; built by default, `-DFS1_LAUNCHER=OFF` to skip | S | M | |
-| S5.3 | First release: `tools/package.py` (repo URL, launcher in the zip), README with screenshots taken by the user, CHANGELOG, GitHub repo `fs1-enhanced` + release (user approves) | H | S | |
+| S5.3 | First release: `tools/package.py` (repo URL, launcher in the zip), README with screenshots taken by the user, CHANGELOG, make https://github.com/kylofon/fs1-enhanced public + GitHub release (user approves) | H | S | |
 
 Notes:
 - Faithful ids: S1.1–S1.3 were S4.2–S4.4, S2.1–S2.2 were S4.5–S4.6, S3.1 was S4.7, S3.2 was S4.10,
@@ -125,11 +125,11 @@ Several bugs in one message; one session then fixes them in a batch.
 2. **Default mode at start**: sharp (default in this repo; `--classic` or F11 for authentic) or authentic?
 3. **Widescreen**: extend the field of view (default) or stretch?
 4. **Release numbering**: v0.1.0 like the other Enhanced repos (default), or v1.0?
-5. **GitHub**: create `fs1-enhanced` when you want it; default: local only until S5.3.
 
 ## Decisions
 - 2026-10-03: separate Enhanced repo (faithful U6.1 answered by the workflow: faithful first, Enhanced
   after its release).
+- 2026-10-03: GitHub repo https://github.com/kylofon/fs1-enhanced created, private until the first release.
 
 ## TODO (parked)
 - [ ] Linux/macOS builds and CI.

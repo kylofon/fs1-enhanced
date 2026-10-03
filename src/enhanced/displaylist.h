@@ -32,6 +32,8 @@ enum {
     DL_F_EDGE = 2,     /* outline line of the polygon being built */
     DL_F_CAPTURED = 4, /* drawn from a captured list (draw_line_list) */
     DL_F_EMPTY = 8,    /* reserved DL_POLY whose flood fill filled nothing: skip */
+    DL_F_LEAK = 16,    /* DL_POLY whose flood fill left its outline (or the outline was open): the box
+                          x0,y0-x1,y1 of the changed pixels must be shown from the CGA picture */
 };
 
 typedef struct DlPt {
@@ -49,7 +51,7 @@ typedef struct DlItem {
         struct { DlPt a, b; } line;                              /* DL_LINE, DL_DOT (a) */
         struct { float x, y, w, h; } rect;                       /* DL_FILL, DL_RESTORE */
         struct { DlPt a, b; uint16_t pat_l, pat_r; } sky;        /* DL_SKYGROUND */
-        struct { uint16_t first, count, rings; } poly;           /* DL_POLY: vertices in DlFrame.verts */
+        struct { uint16_t first, count, rings; uint8_t x0, y0, x1, y1; } poly; /* DL_POLY: vertices in DlFrame.verts */
         struct { uint16_t off, addr; uint8_t w, h, op; } sprite; /* DL_SPRITE */
         struct { uint16_t desc; uint8_t angle; } needle;         /* DL_NEEDLE */
         struct { uint16_t off, mask; int8_t shift; uint8_t len; char s[40]; } text; /* DL_TEXT */

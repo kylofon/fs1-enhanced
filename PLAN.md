@@ -112,6 +112,11 @@ Notes:
 
 - S1.2: recorder and hooks in `displaylist.c`; `--dump-dl FILE`, `--dl-check` ("every back-buffer write was
   recorded" in a flight run; the polygon fill-vs-outline report lists 12 of 36 polys, e.g. a 82 vs 69 px box).
+  Follow-up (2nd pass, same day): outline edges are joined into rings in either direction and clipped chains
+  are joined along the view border; a polygon whose flood fill leaked out of its outline (mountain ridges:
+  the fill runs down to the horizon) gets `DL_F_LEAK` plus the box `x0,y0-x1,y1` of the changed pixels in
+  `DlItem.u.poly` (see docs/RENDER.md, "S1.2 as built"). **S1.3 should show that box from the CGA picture**
+  (not yet wired in `sharp.c`). All 14 campaign sessions are `--dl-check` clean (except `reboot`: boot text).
 - S1.3: `src/enhanced/sharp.{c,h}`. The CGA texture is drawn as before, then the committed view list is
   drawn over the view rows as one `SDL_RenderGeometry` batch (fills, sky/ground split by the horizon line,
   ear-clipped polygons, lines as quads of `--line-width N` output pixels (default 2; 0 = `SDL_RenderLine`

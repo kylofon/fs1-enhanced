@@ -82,18 +82,19 @@ twice, and anything drawn without a projection still appears.
 
 | Where (native, file) | Hook | Records |
 |---|---|---|
-| `f_4D18` / `f_4D56` (`scenery.c`, after `[3165]` is written) | `dl_stage_line(pc, from_prev)` | floats of point 1 (eye 310F/3111/3113) or, for `f_4CA3`, the previous staged end; point 2 (eye 311B/311D/311F). The staged end is kept as the next "previous" (matches `[3165]`). |
-| same, capture branch (`capture_mode` set) | `dl_capture_line(pc, addr)` | the staged floats into the **capture shadow**, keyed by the capture address (horizon programs write `horizon_list` 041F) |
-| `project` (`transform.c`) | `dl_stage_dot(pc, x, y, z)` / `dl_capture_dot` | float dot; capture mode → shadow (FE records) |
+| `f_4D18` / `f_4CA3` (`scenery.c`, after `rSI = rCX`) | `dl_stage_p1(pc, from_prev, sw)` | float point 1: eye 310F/3111/3113, or for `f_4CA3` the previous staged end (checked against `[3165]`) |
+| `f_4D56` (after `[3165]` is written) | `dl_stage_p2(pc, sw1, sw2)` | float point 2 (eye 311B/311D/311F) and the integer endpoints; the end is kept as the next "previous" |
+| same, capture branch (`capture_mode` set) | `dl_capture(pc, addr)` | the staged line into the **capture shadow**, keyed by the capture address (horizon programs write `horizon_list` 041F) |
+| `project` (`transform.c`, after both axes) | `dl_stage_dot(pc, x, y, z, sx, sy)` | float dot for the integer pixel (sx, sy). Capture-mode dots (FE records) are not shadowed: they are plotted as integer dots |
 | `draw_line_cpu` (`line.c`) | `dl_line(pc, regs, seg, poly)` | `DL_LINE` from BX,BP → SI,DI with `[30C8]`; with `[31D0]` set it is also an edge of the open polygon (`DL_F_EDGE`) |
-| `n_draw_line_list` (`line.c`), per record | `dl_stage_from_capture(pc, addr)` | looks the record up in the capture shadow, so the dusk horizon line is sharp too |
+| `n_draw_line_list` (`line.c`), per record | `dl_stage_from_capture(pc, addr)` | looks the record up in the capture shadow (verified against the record bytes), so the dusk horizon line is sharp too |
 | `plot_pixel` / `plot_pixel_es` (`buffer.c`) | `dl_dot(pc, x, y, seg)` | `DL_DOT` (staged float if it matches) |
 | `n_clear_view_buffer` (`buffer.c`) | `dl_fill_view(pc, pattern)` | `DL_FILL` of the whole view; drops the items before it |
 | `fill_rows_body` (`horizon.c`) / `n_fill_rows` (`buffer.c`) | `dl_fill_rows(pc, first, last, pattern, seg)` | `DL_FILL` of whole rows |
-| `horizon_fill_body` (`horizon.c`), at its end | `dl_sky_ground(pc)` | replaces the fills it made with one `DL_SKYGROUND`: horizon from the capture shadow of 041F; the pattern on each side read back from the back buffer at the view corner farthest from the line on that side (robust against the band logic and the inverted cases). No horizon (`[041F] == FF`) → the single `DL_FILL` stays. |
-| `h_poly_begin` / `h_poly_end` (`scenery.c`), `f_span_fill` | `dl_poly_begin`, `dl_poly_end(pc, filled)` | begin reserves a `DL_POLY` slot **before** the outline lines (fill under the outline); end closes the rings from the edges recorded in between. Kept only if the flood fill filled something (`f_span_fill` counts); colour `[3159]`. |
-| `n_draw_view_frame`, `overlay_body` (`mainloop.c`), `radar_clear_body` (`horizon.c`) | `dl_fill_rect(pc, …, seg)` | `DL_FILL` rects of the border, gun-sight/overlay marks and radar marks |
-| `n_blit_view_to_screen` (`buffer.c`) | `dl_commit_view(pc)` | ends the view frame: the built list becomes the committed one (double-buffered), with a snapshot of the view bytes just written to B800 (section 5). The next list starts empty. |
+| `horizon_fill_body` (`horizon.c`, a wrapper around `horizon_fill_main`) | `dl_sky_begin(pc)` / `dl_sky_ground(pc)` | replaces the fills it made with one `DL_SKYGROUND`: horizon from the capture shadow of 041F; the pattern on each side read back from the back buffer at the view corner farthest from the line on that side (robust against the band logic and the inverted cases). No horizon (`[041F] == FF`) → the single `DL_FILL` stays. |
+| `h_poly_begin` / `h_poly_end` (`scenery.c`), `f_span_fill` (at L59E9) | `dl_poly_begin`, `dl_span_fill`, `dl_poly_end` | begin reserves a `DL_POLY` slot **before** the outline lines (fill under the outline); end closes the rings from the edges recorded in between. Kept only if the flood fill filled something (`f_span_fill` counts); colour `[3159]`. |
+| `n_draw_view_frame`, `overlay_body` (`mainloop.c`), `radar_clear_body` (`horizon.c`) | `dl_fill_bytes(pc, seg, off, n, value, mask)` | `DL_FILL` spans of the border (`F0` mask = one pixel), the overlay marks and the radar marks; `n_clear_view_buffer` and `radar_clear_body`'s clear use `dl_fill_view(pc, pattern, words)` |
+| `n_blit_view_to_screen` (`buffer.c`) | `dl_commit_view(pc)` | ends the view frame: the built list becomes the committed one (double-buffered; S1.3 adds the snapshot of the view bytes for the CGA fallback, section 5). The next list starts empty. |
 
 Polygon note: the original draws the outline, leaves the midpoint pixel of each edge as a seed and
 flood-fills from the inside neighbours, replacing pattern `[31CE]` by `[3159]`. The sharp version fills
@@ -104,6 +105,28 @@ from the vector area so such scenery can be listed.
 
 Paths the natives hand to original code (scenery bail-outs, `--native-off`) are not recorded; the
 fallback in section 5 shows them.
+
+**S1.2 as built.** Hooks run *before* the native writes (except `dl_sky_ground`, `dl_poly_end`,
+`dl_commit_view`), so `--dl-check` can attribute writes. Differences from the plan above:
+- `--dump-dl FILE` writes one text block per committed frame (`frame N …`, then `fill`, `sky`, `line`,
+  `dot`, `poly` lines; lines are listed as `a b` where a is often the far end: the draw routines receive the
+  end points in either order). `--dl-check` prints, at exit, the pairs of hooks between which back-buffer
+  bytes changed that no hook claimed, plus a polygon fill-vs-vector report. Both options turn `dl_on` on
+  (never under `--classic`); the verification gate never passes them.
+- **Polygon rings** are built from the outline edges by joining touching end points (either direction), then
+  chains cut by the clip rectangle (x 1..159, y 0..105) are joined along the view border; a ring left open
+  is closed by a chord, or through one corner when its ends are on adjacent borders. Rings without area
+  are dropped. Rings in the vertex pool are separated by a NaN vertex.
+- **Leaking flood fills.** A fill that is not bounded by its outline (mountain polygons whose outline is only
+  the ridge line fill the sky down to the horizon) cannot be reproduced from vectors. `dl_poly_end` compares
+  the pixels changed since `dl_poly_begin` with area + perimeter; when it is more than twice that the
+  `DL_POLY` gets `DL_F_LEAK` and the box `x0,y0-x1,y1` of the changed pixels. S1.3 shows that box from the
+  CGA picture. In the campaign sessions about 20% of the polygons in the demo leak, and most in `editor_values`.
+- Not recorded (listed by `--dl-check` only when they happen): the war-mode gun-sight clear in
+  `overlay_body` (AND masks), the resumable loop natives `n_view_frame_loop` / `n_overlay_rows` (an interrupt
+  was due inside the frame/overlay), `horizon_list_body` (native off) and text/panel items (S2).
+- The campaign sessions (demo, flight_keys, slew, war, editor_values, user modes, display types) all end with
+  "every back-buffer write was recorded" except `reboot`, whose first frame is the boot text screen.
 
 ## 5. Frames, validity and the CGA fallback
 

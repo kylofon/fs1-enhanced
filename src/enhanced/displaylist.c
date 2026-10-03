@@ -447,6 +447,33 @@ void dl_sky_ground_(Pc *pc)
 
 /* ---- polygons ----------------------------------------------------------------------------- */
 
+static uint8_t poly_snap[BUF_SIZE]; /* the view buffer at poly_begin */
+
+/* Fat pixels of the view rows that differ from base, and the box of those pixels. */
+static int diff_pixels(Pc *pc, const uint8_t *base, int *x0, int *y0, int *x1, int *y1)
+{
+    const uint8_t *buf = pc->cpu.mem + cpu_linear(view_seg(pc), 0);
+    int n = 0;
+    *x0 = VIEW_W, *y0 = VIEW_H, *x1 = *y1 = 0;
+    for (int i = 0; i < BUF_SIZE; i++) {
+        if ((i & 0x1FFF) >= VIEW_H / 2 * 80 || buf[i] == base[i])
+            continue;
+        int y = ((i & 0x1FFF) / 80) * 2 + (i >= 0x2000), xb = (i & 0x1FFF) % 80;
+        int d = buf[i] ^ base[i];
+        int xl = xb * 2 + ((d & 0xF0) ? 0 : 1), xr = xb * 2 + ((d & 0x0F) ? 1 : 0);
+        n += ((d & 0xF0) ? 1 : 0) + ((d & 0x0F) ? 1 : 0);
+        if (xl < *x0)
+            *x0 = xl;
+        if (xr > *x1)
+            *x1 = xr;
+        if (y < *y0)
+            *y0 = y;
+        if (y > *y1)
+            *y1 = y;
+    }
+    return n;
+}
+
 static int poly_slot = -1, poly_edges_from;
 static int span_fills;
 
@@ -454,6 +481,7 @@ void dl_poly_begin_(Pc *pc)
 {
     sync(pc, "poly_begin");
     span_fills = 0;
+    memcpy(poly_snap, pc->cpu.mem + cpu_linear(view_seg(pc), 0), BUF_SIZE);
     DlItem *it = add(DL_POLY, DL_F_EMPTY, 0);
     poly_slot = it ? cur()->n_items - 1 : -1;
     poly_edges_from = cur()->n_items;
@@ -467,7 +495,8 @@ void dl_span_fill_(Pc *pc)
 
 static int border_side(DlPt p) /* 1 left, 2 right, 4 top, 8 bottom */
 {
-    return (p.x < 1.0f ? 1 : 0) | (p.x >= VIEW_W - 1.0f ? 2 : 0) | (p.y < 1.0f ? 4 : 0) | (p.y >= VIEW_H - 1.0f ? 8 : 0);
+    /* the clip rectangle of the scenery is x 1..159, y 0..105 (column 0 holds the white frame) */
+    return (p.x <= 1.5f ? 1 : 0) | (p.x >= VIEW_W - 1.5f ? 2 : 0) | (p.y <= 1.5f ? 4 : 0) | (p.y >= VIEW_H - 1.5f ? 8 : 0);
 }
 
 static bool near_pt(DlPt a, DlPt b) { return fabsf(a.x - b.x) < 1.0f && fabsf(a.y - b.y) < 1.0f; }
@@ -505,6 +534,16 @@ void dl_poly_end_(Pc *pc)
     if (slot < 0 || slot >= f->n_items || f->items[slot].kind != DL_POLY)
         return;
     if (span_fills == 0) { /* the flood fill filled nothing (night, radar view, or a blocked seed) */
+        float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f; /* it may still have marked seed pixels by the outline */
+        for (int i = poly_edges_from; i < f->n_items; i++) {
+            const DlItem *e = &f->items[i];
+            if (e->kind != DL_LINE || !(e->flags & DL_F_EDGE))
+                continue;
+            x0 = fminf(x0, fminf(e->u.line.a.x, e->u.line.b.x)), x1 = fmaxf(x1, fmaxf(e->u.line.a.x, e->u.line.b.x));
+            y0 = fminf(y0, fminf(e->u.line.a.y, e->u.line.b.y)), y1 = fmaxf(y1, fmaxf(e->u.line.a.y, e->u.line.b.y));
+        }
+        if (x1 >= x0)
+            claim_box(pc, (int)x0 - 2, (int)y0 - 1, (int)x1 + 2, (int)y1 + 1);
         sync(pc, "poly_end");
         return;
     }
@@ -525,7 +564,13 @@ void dl_poly_end_(Pc *pc)
         minx = fminf(minx, fminf(a.x, b.x)), maxx = fmaxf(maxx, fmaxf(a.x, b.x));
         miny = fminf(miny, fminf(a.y, b.y)), maxy = fmaxf(maxy, fmaxf(a.y, b.y));
     }
-    for (int s0 = 0; s0 < n_edges; s0++) {
+    /* Chains of touching edges (grown at both ends), then chains cut by the clip rectangle are joined along
+     * the view border: the flood fill of the original is bounded by the border where the outline was clipped. */
+    enum { MAX_CHAINS = 64, SCRATCH = 4096 };
+    static DlPt scratch[SCRATCH];
+    struct Chain { DlPt *p; int n; bool dead; } ch[MAX_CHAINS];
+    int n_ch = 0, sc = 0;
+    for (int s0 = 0; s0 < n_edges && n_ch < MAX_CHAINS; s0++) {
         if (used[s0])
             continue;
         used[s0] = true;
@@ -552,9 +597,46 @@ void dl_poly_end_(Pc *pc)
                 used[k] = grew = true;
             }
         }
+        int n = hi - lo + 1;
+        if (sc + n > SCRATCH)
+            break;
+        memcpy(&scratch[sc], &chain[lo], (size_t)n * sizeof(DlPt));
+        ch[n_ch++] = (struct Chain){ &scratch[sc], n, false };
+        sc += n;
+    }
+    for (;;) { /* join the pair of chain ends that share a border side with the smallest gap */
+        float best = 1e30f;
+        int bx = -1, by = -1, bex = 0, bey = 0;
+        for (int x = 0; x < n_ch; x++)
+            for (int y = x + 1; y < n_ch; y++) {
+                if (ch[x].dead || ch[y].dead)
+                    continue;
+                for (int ex = 0; ex < 2; ex++)
+                    for (int ey = 0; ey < 2; ey++) {
+                        DlPt px = ch[x].p[ex ? ch[x].n - 1 : 0], py = ch[y].p[ey ? ch[y].n - 1 : 0];
+                        float gap = fabsf(px.x - py.x) + fabsf(px.y - py.y);
+                        if ((border_side(px) & border_side(py)) && gap < best)
+                            best = gap, bx = x, by = y, bex = ex, bey = ey;
+                    }
+            }
+        if (bx < 0 || n_ch >= MAX_CHAINS || sc + ch[bx].n + ch[by].n > SCRATCH)
+            break;
+        DlPt *np = &scratch[sc];
+        int m = 0;
+        for (int i = 0; i < ch[bx].n; i++) /* X ending at the joined end */
+            np[m++] = ch[bx].p[bex ? i : ch[bx].n - 1 - i];
+        for (int i = 0; i < ch[by].n; i++) /* then Y starting at its joined end */
+            np[m++] = ch[by].p[bey ? ch[by].n - 1 - i : i];
+        sc += m;
+        ch[bx].dead = ch[by].dead = true;
+        ch[n_ch++] = (struct Chain){ np, m, false };
+    }
+    for (int c = 0; c < n_ch; c++) {
+        if (ch[c].dead)
+            continue;
         int ring_from = f->n_verts;
-        for (int k = lo; k <= hi; k++)
-            vert(chain[k]);
+        for (int k = 0; k < ch[c].n; k++)
+            vert(ch[c].p[k]);
         if (end_ring(f, ring_from)) {
             rings++;
             vert((DlPt){ DL_RING_BREAK_X, 0 });
@@ -563,29 +645,41 @@ void dl_poly_end_(Pc *pc)
     if (f->n_verts > first && isnan(f->verts[f->n_verts - 1].x))
         f->n_verts--; /* the trailing break */
     if (rings) {
-        poly->flags &= (uint8_t)~DL_F_EMPTY;
         poly->colour = d8(pc, COLOUR_BYTE);
         poly->u.poly.first = (uint16_t)first;
         poly->u.poly.count = (uint16_t)(f->n_verts - first);
         poly->u.poly.rings = (uint16_t)rings;
     }
-    if (chk_on && chk_valid) {
-        float area = 0, perim = 0; /* the fat-pixel outline covers about half its length on the inside */
-        for (int k = 0, from = 0; k <= poly->u.poly.count && rings; k++) {
-            if (k == poly->u.poly.count || isnan(f->verts[first + k].x)) {
-                float a2 = 0;
-                for (int j = from; j < k; j++) {
-                    DlPt p = f->verts[first + j], q = f->verts[first + (j + 1 < k ? j + 1 : from)];
-                    a2 += p.x * q.y - q.x * p.y;
-                    perim += fabsf(p.x - q.x) > fabsf(p.y - q.y) ? fabsf(p.x - q.x) : fabsf(p.y - q.y);
-                }
-                area += fabsf(a2) * 0.5f;
-                from = k + 1;
+    float area = 0, perim = 0; /* of the rings (perimeter in fat pixels along the major axis) */
+    for (int k = 0, from = 0; k <= poly->u.poly.count && rings; k++) {
+        if (k == poly->u.poly.count || isnan(f->verts[first + k].x)) {
+            float a2 = 0;
+            for (int j = from; j < k; j++) {
+                DlPt p = f->verts[first + j], q = f->verts[first + (j + 1 < k ? j + 1 : from)];
+                a2 += p.x * q.y - q.x * p.y;
+                perim += fabsf(p.x - q.x) > fabsf(p.y - q.y) ? fabsf(p.x - q.x) : fabsf(p.y - q.y);
             }
+            area += fabsf(a2) * 0.5f;
+            from = k + 1;
         }
+    }
+    /* Everything the outline and the flood fill changed since poly_begin: a fill that leaked out of (or was
+     * not closed by) the outline cannot be reproduced from the vectors, so the item carries the box of the
+     * changed pixels and the back end shows that box from the CGA picture (DL_F_LEAK). */
+    int lx0, ly0, lx1, ly1;
+    int total = diff_pixels(pc, poly_snap, &lx0, &ly0, &lx1, &ly1);
+    bool leak = total > 2 * (area + perim) + 30;
+    if (leak) {
+        poly->flags |= DL_F_LEAK;
+        poly->u.poly.x0 = (uint8_t)lx0, poly->u.poly.y0 = (uint8_t)ly0;
+        poly->u.poly.x1 = (uint8_t)lx1, poly->u.poly.y1 = (uint8_t)ly1;
+    }
+    if (rings || leak)
+        poly->flags &= (uint8_t)~DL_F_EMPTY;
+    if (chk_on && chk_valid) {
         int changed = chk_changed_pixels(pc); /* the interior only: the outline lines were synced before */
         chk_poly_all++;
-        if (changed > 2 * (area + 0.5f * perim) + 30 || area > 2 * changed + perim + 30) { /* leaked / blocked */
+        if (leak || area > 2 * changed + perim + 30) { /* leaked / blocked */
             if (chk_poly_n < 8) {
                 chk_poly[chk_poly_n].frame = f->number + 1, chk_poly[chk_poly_n].changed = changed;
                 chk_poly[chk_poly_n].x0 = (int)minx, chk_poly[chk_poly_n].y0 = (int)miny;
@@ -595,7 +689,9 @@ void dl_poly_end_(Pc *pc)
             chk_poly_total++;
         }
     }
-    /* The flood fill wrote inside the outline: claim its bounding box (one row/byte around it). */
+    /* The flood fill wrote inside the outline (one row/byte around it) or, for a leak, inside its box. */
+    if (leak)
+        claim_box(pc, lx0, ly0, lx1, ly1);
     claim_box(pc, (int)minx - 2, (int)miny - 1, (int)maxx + 2, (int)maxy + 1);
     sync(pc, "poly_end");
 }
@@ -648,6 +744,8 @@ static void dump_frame(const DlFrame *f)
         case DL_POLY:
             fprintf(dump, "poly col=%02X rings=%d verts=%d%s", it->colour, it->u.poly.rings, it->u.poly.count,
                     it->flags & DL_F_EMPTY ? " empty" : "");
+            if (it->flags & DL_F_LEAK)
+                fprintf(dump, " leak=%d,%d-%d,%d", it->u.poly.x0, it->u.poly.y0, it->u.poly.x1, it->u.poly.y1);
             for (int k = 0; k < it->u.poly.count && !(it->flags & DL_F_EMPTY); k++) {
                 DlPt v = f->verts[it->u.poly.first + k];
                 if (isnan(v.x))

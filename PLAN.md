@@ -22,8 +22,8 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 ## Status
 
-- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK).
-- **Next:** S1.1 (Opus). No user tasks pending. Decisions D1–D4 below are binding.
+- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`).
+- **Next:** S1.2 (Sonnet). No user tasks pending. Decisions D1–D4 below are binding.
 - Escalation rule: a subtask that fails twice on Sonnet → new Opus session with a 5-line note
   (symptom, file, what was tried). Never carry an old transcript over.
 
@@ -63,7 +63,7 @@ window size. The CGA path stays as the authentic mode (`--classic`, or toggled i
 ### Phase 1 — Sharp 3D view
 | Id | Task | Model | Size | Status |
 |---|---|---|---|---|
-| S1.1 | Design: display-list format and recording points in the natives (`raster.h` lines, `fill_rows`/horizon, `textdraw.h`, `panel.h` sprites/needles, scenery dots); sub-pixel coordinates from the projection before rounding; `docs/RENDER.md`; no code beyond a skeleton in `src/enhanced/` | O | M | |
+| S1.1 | Design: display-list format and recording points in the natives (`raster.h` lines, `fill_rows`/horizon, `textdraw.h`, `panel.h` sprites/needles, scenery dots); sub-pixel coordinates from the projection before rounding; `docs/RENDER.md`; no code beyond a skeleton in `src/enhanced/` | O | M | done 2026-10-03 |
 | S1.2 | 3D view display list: record scenery lines/dots/polygons and horizon with float coordinates; `--dump-dl` to a text file per frame for checks | S | M | |
 | S1.3 | SDL back end for the 3D view: lines (`SDL_RenderLines`, thickness option), filled sky/ground and polygons (`SDL_RenderGeometry`), slightly richer palette than the 4 composite colours (minor adjustments for clarity only, D1); toggle authentic/sharp (F11 cycles with composite/RGB); **U1 check** | S | M | |
 
@@ -102,6 +102,13 @@ Notes:
   `fs1-enhanced` (CMake target still `fs1`, `OUTPUT_NAME`); `tools/trace_campaign.py` and
   `tools/package.py` use the new name. Verified: both builds clean, `verify_campaign.py` OK,
   `--classic --frames 120` boots headless.
+- S1.1: design in `docs/RENDER.md`, skeleton `src/enhanced/displaylist.{h,c}` (format, hook API, no
+  hooks placed). Key points for S1.2/S1.3: projection hooks only *stage* floats, drawing hooks *emit*
+  (matched on the integer endpoints); horizon floats go through a capture shadow keyed by the capture
+  address; sky/ground sides are read back from the back buffer; polygons are outline + flood fill in
+  the original (3.4.md), recorded as a reserved `DL_POLY` under its edges; anything unrecorded shows
+  through a per-tile CGA fallback (owner/expect shadow of B800), so a missing hook is blurry, never
+  wrong. `--dl-check` (S1.2) proves the hook list complete.
 
 ## User tasks
 

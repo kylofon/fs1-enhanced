@@ -111,8 +111,18 @@ static void fill_rect(float x, float y, float w, float h, SDL_FColor col)
 
 /* A line as a quad of line_width output pixels, extended by half a width at both ends so that chained
  * lines meet without gaps. */
+#define MAX_HAIR 8192
+typedef struct { SDL_FPoint a, b; SDL_FColor c; } Hair;
+static Hair hair[MAX_HAIR];
+static int n_hair;
+
 static void line(DlPt p, DlPt q, SDL_FColor col)
 {
+    if (line_width <= 0) { /* hairline: kept for the flush, which draws it with SDL_RenderLine */
+        if (n_hair < MAX_HAIR)
+            hair[n_hair++] = (Hair){ to_out(p.x, p.y), to_out(q.x, q.y), col };
+        return;
+    }
     SDL_FPoint a = to_out(p.x, p.y), b = to_out(q.x, q.y);
     float dx = b.x - a.x, dy = b.y - a.y, len = sqrtf(dx * dx + dy * dy), h = line_width * 0.5f;
     if (len < 1e-3f) {
@@ -247,13 +257,27 @@ static void fallback_tiles(SDL_Renderer *r, const Pc *pc, SDL_Texture *cga, cons
     }
 }
 
+/* Draws the batched geometry (and hairlines) so far, clipped to the view. */
+static void flush(SDL_Renderer *r)
+{
+    SDL_Rect clip = { 0, (int)((float)view_y0 * SY + 0.5f), 640, (int)(VIEW_H * SY + 0.5f) };
+    SDL_SetRenderClipRect(r, &clip);
+    if (n_idx)
+        SDL_RenderGeometry(r, NULL, verts, n_verts, idx, n_idx);
+    for (int i = 0; i < n_hair; i++) {
+        SDL_SetRenderDrawColorFloat(r, hair[i].c.r, hair[i].c.g, hair[i].c.b, 1);
+        SDL_RenderLine(r, hair[i].a.x, hair[i].a.y, hair[i].b.x, hair[i].b.y);
+    }
+    n_verts = n_idx = n_hair = 0;
+}
+
 bool sharp_view(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga)
 {
     const DlFrame *f = dl_view();
     if (!f || f->incomplete || !pc->composite || (pc->cga_mode & 0x1E) != 0x1A)
         return false;
     view_y0 = f->view_row;
-    n_verts = n_idx = 0;
+    n_verts = n_idx = n_hair = 0;
 
     for (int i = 0; i < f->n_items; i++) {
         const DlItem *it = &f->items[i];
@@ -265,12 +289,18 @@ bool sharp_view(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga)
             sky(it);
             break;
         case DL_POLY:
-            if (!(it->flags & DL_F_EMPTY))
+            if (it->flags & DL_F_LEAK) { /* the fill left its outline: show the changed box from the CGA picture */
+                flush(renderer);
+                int x0 = it->u.poly.x0, y0 = it->u.poly.y0, x1 = it->u.poly.x1, y1 = it->u.poly.y1;
+                SDL_FRect src = { (float)(x0 * 4), (float)(view_y0 + y0), (float)((x1 - x0 + 1) * 4), (float)(y1 - y0 + 1) };
+                SDL_FRect dst = { src.x, src.y * SY, src.w, src.h * SY };
+                SDL_RenderTexture(renderer, cga, &src, &dst);
+            } else if (!(it->flags & DL_F_EMPTY)) {
                 poly(f, it);
+            }
             break;
         case DL_LINE:
-            if (line_width > 0)
-                line(it->u.line.a, it->u.line.b, col_pair(it->colour));
+            line(it->u.line.a, it->u.line.b, col_pair(it->colour));
             break;
         case DL_DOT:
             dot(it->u.line.a, col_pair(it->colour));
@@ -280,21 +310,7 @@ bool sharp_view(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga)
         }
     }
 
-    SDL_Rect clip = { 0, (int)((float)view_y0 * SY + 0.5f), 640, (int)(VIEW_H * SY + 0.5f) };
-    SDL_SetRenderClipRect(renderer, &clip);
-    if (n_idx)
-        SDL_RenderGeometry(renderer, NULL, verts, n_verts, idx, n_idx);
-    if (line_width <= 0) { /* hairlines */
-        for (int i = 0; i < f->n_items; i++) {
-            const DlItem *it = &f->items[i];
-            if (it->kind != DL_LINE)
-                continue;
-            SDL_FColor c = col_pair(it->colour);
-            SDL_SetRenderDrawColorFloat(renderer, c.r, c.g, c.b, 1);
-            SDL_FPoint a = to_out(it->u.line.a.x, it->u.line.a.y), b = to_out(it->u.line.b.x, it->u.line.b.y);
-            SDL_RenderLine(renderer, a.x, a.y, b.x, b.y);
-        }
-    }
+    flush(renderer);
     SDL_SetRenderClipRect(renderer, NULL);
     fallback_tiles(renderer, pc, cga, dl_view_snap(), view_y0);
     return true;

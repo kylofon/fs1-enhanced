@@ -1,0 +1,20 @@
+# Original game files (not redistributable)
+/Game/
+
+# Build output and copied binaries
+build*/
+/release/
+*.exe
+*.dll
+*.log
+__pycache__/
+
+# Generated plan tracker (tools/plan_site.py) and work output
+/site/
+/work/
+
+# Original disk images: junction to the faithful repo's original/ (not redistributable)
+/original
+*.ima
+*.dsk
+/extracted/

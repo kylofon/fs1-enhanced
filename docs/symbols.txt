@@ -1,0 +1,770 @@
+# Symbols for MS Flight Simulator 1.05 (used by tools/fs1dis.py)
+#
+#   code SEG:OFF name                ; comment
+#   var  SEG:OFF name [byte|word|dword|table|text] ; comment
+#
+# Code is segment 0050 (linear 00500-0685F) and identical at runtime, except 0050:07BD
+# (self-patched immediate) and 0050:5C80+ (one-time init code, later reused as data:
+# DS:0000 = CS:5C80). Game data segment DS=0618 (stored at 0000:0120 for the ISRs).
+# Angles: 16-bit binary, 0x10000 = 360 deg. Sin/cos: Q15. Controls: signed 16-bit, 7FFF = full.
+# Evidence: [key] = observed via scripted key presses; [code] = read from the disassembly;
+# "?" in a comment = plausible but unconfirmed.
+
+# ---- boot loader / disk (resident boot sector) ---------------------------------------
+code 0050:0000 boot_start            ; boot sector relocated from 0000:7C00
+code 0050:00BE disk_format_write_track ; [code] int 13h AH=05 then AH=03 on track [03B3]
+code 0050:00F0 disk_reset            ; [code] int 13h AH=00
+code 0050:0104 boot_read_track       ; [code] int 13h AH=02, 8 sectors of track [03B3] into [03C2]:0000 (B800)
+code 0050:0157 track_checksum        ; [code] word sum of the 4 KB track buffer (optional verify)
+code 0050:017C boot_stream_byte      ; [code] next byte of the track stream, reads next track at 4 KB
+code 0050:01A0 boot_stream_word
+code 0050:01AD boot_stream_put_byte  ; [code] write side of the stream (backup, preset save)
+
+# ---- main program ------------------------------------------------------------------------
+code 0050:5C9F start                 ; entry after the loader
+code 0050:5CE9 startup_menus         ; [code] display A/B/C, then demo / flight / backup
+code 0050:5DA6 hook_int9             ; installs int9_keyboard, old vector at 03FB
+code 0050:5DC3 hook_int8             ; installs int8_timer, old vector at 040E
+code 0050:5600 cga_program_regs      ; writes (port-3D0, value) pairs from table [BX] (default 399C)
+code 0050:5F54 disk_backup           ; [code] "insert master/copy" backup loop
+code 0050:629C check_master_disk     ; [code] track 1C byte 0: 1 = master (offer backup), 2 = copy; no anti-copy check
+code 0050:62D2 write_key_track       ; [code] backup mode only
+code 0050:0732 store_ds_for_isr      ; [code] block copy, writes DS to 0000:0120
+code 0050:01F8 main_loop             ; [code] per frame: editor, pause, flight, render, 4-phase panel work on [03F6]
+
+# ---- interrupts, timing, sound -------------------------------------------------------------
+code 0050:07A0 int8_timer            ; [code] engine sound bit pattern -> port 61h; 36.4 Hz slow path; 18.2 Hz clock; calls flight_forces
+code 0050:087F sound_update          ; [code] state machine via table [0559] indexed by [0548]; sets PIT ch0 rate from RPM
+code 0050:0944 speaker_tone          ; [code] PIT ch2 divisor = AX, speaker on
+code 0050:0970 int9_keyboard         ; [code] port 60h, Ctrl+Alt+Del -> F000:E05B, dispatch
+code 0050:09AB key_dispatch          ; [code] scancode -> key_handlers, or editor_key in the editor
+
+# ---- key handlers (table key_handlers; behaviour verified with scripted keys) ----------------
+code 0050:0A04 key_esc_editor        ; [key]
+code 0050:0A0A key_mag_off           ; [key] '1'; key table at 05B1 starts at scancode 02
+code 0050:0A0D key_set_magnetos
+code 0050:0A21 key_mag_left
+code 0050:0A26 key_mag_right
+code 0050:0A2B key_mag_both
+code 0050:0A30 key_mag_start
+code 0050:0A35 key_0
+code 0050:0A3A key_minus             ; [key] decrease selected item
+code 0050:0B53 key_equals            ; [key] increase selected item
+code 0050:0C79 key_tab               ; [code] cycles CRTC R2 (horizontal position)
+code 0050:0C8A key_w                 ; [key] war mode: cycle status line
+code 0050:0C90 key_t                 ; [key] transponder digit
+code 0050:0CD5 key_p_pause           ; [key]
+code 0050:0CDA key_a
+code 0050:0CE3 key_d                 ; [code] directional gyro from compass?
+code 0050:0CF6 key_g_gear            ; [key]
+code 0050:0D14 key_h_carb_heat       ; [key]
+code 0050:0D1A key_l_lights          ; [key]
+code 0050:0D20 key_x_bomb            ; [key] war mode
+code 0050:0D4B key_c_com             ; [key]
+code 0050:0D6E key_v_obi             ; [key]
+code 0050:0D74 key_n_nav             ; [key]
+code 0050:0D92 key_m_nop             ; [code] empty
+code 0050:0D93 key_period_brakes     ; [key] on the ground: airspeed -= 0100h, floor 0 (also from flight_integrate after a reset)
+code 0050:0DA8 key_kpstar_reset      ; [key] recall + apply current user-mode preset
+code 0050:0DAF key_alt_slew_level    ; [key] slew mode only
+code 0050:0DC5 key_space_guns        ; [key] war mode
+code 0050:0DD3 key_flaps_up          ; [key] F1; F3/F5/F7/F9 enter at 0E15/0E1D/0E25/0E2D
+code 0050:0DD9 set_flaps
+code 0050:0E35 key_throttle_inc      ; [key] F4
+code 0050:0E45 key_throttle_full     ; [key] F2
+code 0050:0E7B key_throttle_inc_small ; [key] F6
+code 0050:0E89 key_throttle_dec      ; [key] F8
+code 0050:0E97 key_throttle_cut      ; [key] F10
+code 0050:0EA5 key_radar_on          ; [key] Num Lock
+code 0050:0EB0 key_radar_off         ; [key] Scroll Lock
+code 0050:0EC3 key_trim_down         ; [key] KP7
+code 0050:0EDC key_ignore            ; unbound keys; also tail of trim update
+code 0050:0EF4 key_kp9_slew          ; [key]
+code 0050:0F00 key_elevator_down     ; [key] KP8
+code 0050:0F4B key_aileron_left      ; [key] KP4
+code 0050:0F61 key_center            ; [key] KP5
+code 0050:0F90 key_aileron_right     ; [key] KP6
+code 0050:0FD4 key_rudder_right      ; [key] KP+
+code 0050:1008 key_trim_up           ; [key] KP1
+code 0050:1024 key_elevator_up       ; [key] KP2
+code 0050:1044 key_kp3_slew          ; [key]
+code 0050:1050 key_rudder_left       ; [key] KP0
+code 0050:1060 key_enter             ; [code] in the editor, chains to the BIOS keyboard handler
+code 0050:109B key_repeat_accel      ; [code] BL = key index
+
+# ---- flight model -----------------------------------------------------------------------------
+code 0050:1610 flight_forces         ; [code] from int8_timer every 3rd 18.2 Hz tick: lift/drag/thrust/gravity, integrates airspeed and pitch, turn rate
+code 0050:18CE fix_loop_over         ; [code] |pitch| > 90 deg -> mirror pitch, bank/heading +180
+code 0050:1906 flight_integrate      ; [code] main loop: dt from timer; heading, bank, position, altitude; ground and landing-crash checks
+code 0050:1AF7 flight_params         ; [code] air density, weight, 1/mass terms, vertical speed, bank self-levelling
+code 0050:1C35 slew_update           ; [code] replaces flight_* in slew mode
+code 0050:10B6 control_coupling      ; [code] (aileron-rudder)/2 -> drag/yaw/sideslip terms
+code 0050:10EF wing_cl_offsets       ; [code] flaps+aileron -> per-wing lift offsets 087E/0880
+code 0050:2D00 engine_update         ; [code] RPM/fuel -> thrust [08A4]?
+code 0050:2F10 apply_wind            ; [code] wind drift and turbulence while airborne
+code 0050:2F56 compute_wind          ; [code] wind layer by altitude
+code 0050:0625 crash_handler         ; [code] message by crash_code via table 0481, then reset
+code 0050:045D draw_scenery          ; [code] runs the scenery program; also sets crash_code (terrain/building/water?)
+
+# ---- maths -------------------------------------------------------------------------------------------
+code 0050:45C0 sincos                ; [code] BX = angle -> AX = sin, CX = cos (Q15); BP = angle (or -angle, 7FFFh for 8000h); BX DX SI DI from last sin_quadrant
+code 0050:45FD sin_quadrant          ; [code] BX = 0..4000h -> AX = cos(BX) (Q15) from sine_table + linear interpolation; misnamed: the table is a cosine
+code 0050:1BEE div_q15               ; [code] DX:AX / CX signed -> DX = (|n|/|d|)>>1 signed; saturates 7FFFh/8001h; CX=0 -> by sign of DX; faults (INT 0) for 80000000h
+code 0050:11A9 fmt_signed_dec        ; [code] AX -> sign at [BX] then decimal ASCII digits
+
+# ---- 3D view -----------------------------------------------------------------------------------------
+code 0050:4621 build_view_matrix     ; [code] 3x3 matrix from view_angles
+code 0050:4718 select_view_angles    ; [code] radar = look down; else view direction via [059B]
+code 0050:481F rotate_point          ; [code] point x view_matrix -> eye space 310F..
+code 0050:48E8 world_to_eye_delta    ; [code] point - eye_pos with range check
+code 0050:3CC0 scenery_interp        ; [code] bytecode VM: IP scenery_ip, opcodes via scenery_op_table, 79h ends
+code 0050:3D17 op_dot                ; [code] opcode 00
+code 0050:3D8E op_move_to            ; [code] opcode 01
+code 0050:3DB3 op_line_to            ; [code] opcode 02 (also 29 at 3DDC)
+code 0050:3E1A op_set_viewpoint      ; [code] opcode 05: eye position + angles, rebuilds matrix
+code 0050:3E70 op_jump_rel           ; [code] opcode 0B
+code 0050:3D1A project_dot           ; [code] perspective divide; draws, or captures FE,x,y records
+code 0050:40C8 clip_project_line     ; [code] Cohen-Sutherland vs x=+-z, y=+-z, then draw_line
+code 0050:4A1A outcode_p1
+code 0050:4A4E outcode_p2
+code 0050:4BCD clip_line_planes
+code 0050:2AEA draw_sky_ground       ; [code] skipped in radar view
+code 0050:2B0D horizon_fill          ; [code] projects the horizon (programs per heading octant) and fills bands
+code 0050:2C68 fill_rows             ; [code] rows BL..DL with word pattern BP
+code 0050:2C9E fill_sloped_horizon   ; [code] rows BL..CL, boundary BH->AH bytes (8.8 DDA step [1D4D]); left BP, right [1D44]
+code 0050:2AB0 radar_clear           ; [code] clear both banks (0848h words) + radar centre marks; reached by JNE from draw_sky_ground
+code 0050:5A9E draw_view_frame       ; [code] border of the 3D window
+code 0050:0658 view_overlay_marks    ; [code] fixed bytes in the back buffer (gear/throttle/war)?
+code 0050:03BE scenery_reset_ip      ; [code] scenery_ip = scenery_base
+code 0050:03CA select_scenery_area   ; [code] area from position vs area_bounds; streams track [area_tracks+i] to scenery_base
+code 0050:561E clear_view_buffer     ; [code] both banks, [3800] words of clear_pattern
+code 0050:5637 blit_view_to_screen   ; [code] back buffer [3806] -> B800, both banks
+code 0050:5660 plot_pixel_es
+code 0050:5664 plot_pixel            ; [code] AH = x (0-159), CL = y, nibble colour draw_colour
+code 0050:5691 draw_line             ; [code] BX,BP = x0,y0  SI,DI = x1,y1 in 160x106 nibble pixels; [31D0] != 0 -> alternate path 5060
+code 0050:408C draw_horizon_list
+code 0050:408F draw_line_list        ; [code] AX -> (x0,y0,x1,y1) byte records, FF ends
+
+# ---- instrument panel and text --------------------------------------------------------------------------
+code 0050:1225 print_str             ; [code] SI -> {word screen offset, ASCII..., byte < 20h}
+code 0050:122B print_str_dim         ; [code] same with 8888h stipple mask
+code 0050:122E print_str_mask        ; [code] CX = AND mask; 16x5-pixel glyphs (font address is self-patched)
+code 0050:1282 print_str2            ; [code] variant handling both banks
+code 0050:15E1 print_str_list        ; [code] print_str until a 0 word
+code 0050:15EC clear_screen          ; [code] both banks of segment [03C2]
+code 0050:2111 draw_indicator        ; [code] BP = descriptor (+0 base, +2 rows, +4 frames, +6 new frame, +7 current)
+code 0050:218E indicator_erase       ; [code] restores the saved background
+code 0050:4DF6 blit_or               ; [code] OR sprite (DL words x DH lines) into B800
+code 0050:1D20 draw_needle           ; [code] AL = angle 0-FF, CX = gauge descriptor
+code 0050:1FE0 upd_altimeter         ; [code]
+code 0050:2043 upd_airspeed          ; [code] airspeed -> needle (descriptor 092F)
+code 0050:21F0 panel_update_mask     ; [code] computes panel_mask
+code 0050:156D panel_text_gate       ; [code] skips caller unless panel_mask bit 15
+code 0050:1488 com_tune              ; [code] COM ASCII -> BCD for station compare?
+code 0050:13C6 upd_obi               ; [code] really the heading indicator digits ([06A0] -> mag heading)
+code 0050:1150 slew_readout          ; [code] north/east readout in slew mode
+code 0050:02CB gauge_upd_1401        ; [code] panel_mask bit -> indicator descriptor 1401
+code 0050:02E2 gauge_upd_140D
+code 0050:02F9 gauge_upd_1419
+code 0050:0310 gauge_upd_1425
+code 0050:0327 gauge_upd_1431
+
+# ---- editor ----------------------------------------------------------------------------------------------
+code 0050:3640 editor_main           ; [code] text-mode editor loop
+code 0050:3703 editor_get_input      ; [code] digits, Backspace, Enter/= (accept, next), - (up), Esc, * , s/l (save/load presets)
+code 0050:3855 editor_digits_to_bin
+code 0050:3890 editor_bin_to_digits
+code 0050:396F editor_draw_fields
+code 0050:39E9 editor_read_fields
+code 0050:3A4D usermode_store        ; [code] editor_values -> slot usermode_cur
+code 0050:3A52 usermode_recall       ; [code] slot usermode_cur -> editor_values
+code 0050:3A96 editor_capture_state  ; [code] live state -> editor_values (scaled)
+code 0050:3B36 editor_apply_state    ; [code] editor_values -> live state
+
+# ---- war mode ----------------------------------------------------------------------------------------------
+code 0050:3020 war_frame             ; [code] per frame when war_mode: status, guns, bombs, 3 enemies
+code 0050:30AB war_enemy_update      ; [code] BX = enemy record (29 bytes): steer, fire, evade, draw
+code 0050:344F war_guns              ; [code] bullets 1EE6..1F39, kills enemies with [+A] set
+code 0050:3521 war_bomb_fall         ; [code] [0575] -= 32h; on landing scores [1E53]
+code 0050:3595 war_ammo_dec          ; [code] ammo - 1, digits to 1ED3
+
+# ---- variables in DS=0618 -------------------------------------------------------------------------------
+var 0618:03B3 disk_track byte        ; [code] track for boot_read_track
+var 0618:03B4 area_tracks table      ; [code] start track per scenery area: 0F 12 15 18 1A
+var 0618:03BE cur_area byte          ; [code] current scenery area index
+var 0618:03C4 disk_error byte
+var 0618:03F0 scenery_base word      ; [code] scenery program address (3A84)
+var 0618:03F4 crash_code byte        ; [code] 0A gear up, 4 hard/banked landing, others from draw_scenery
+var 0618:03F5 editor_active byte     ; [code]
+var 0618:03F6 frame_counter word     ; [code] +1 per frame; low 2 bits = panel phase
+var 0618:03FB old_int9 dword
+var 0618:0404 paused byte            ; [key]
+var 0618:0405 radar_view byte        ; [key]
+var 0618:040A timer_hooked word      ; [code] main loop hangs if 0
+var 0618:040E old_int8 dword         ; [code] restored on exit; never chained
+var 0618:041F horizon_list table     ; [code] captured horizon points, FE,x,y records
+var 0618:0449 area_bounds table      ; [code] 8 bytes per area: N min/max, E min/max; FFFF ends
+var 0618:0481 crash_messages table   ; [code] message pointers by crash_code
+var 0618:0540 bomb_whistle word      ; [code] rising PIT ch2 tone while a bomb falls
+var 0618:0419 scenery_loading byte   ; [code] 1 while a scenery area streams from disk (0414-045C); the timer handler skips atis_tick
+var 0618:0542 atis_accum byte        ; [code] += comm_rate every 36.4 Hz slow tick; carry -> atis_tick
+var 0618:0543 spk_pattern word       ; [code] rotating speaker bit pattern (engine sound)
+var 0618:0545 spk_reload word        ; [code] engine pattern copied to spk_pattern on restart: engine_sound (sound_update state 0) or 9 (guns, state 3)
+var 0618:0548 sound_state byte       ; [code] index into the sound_update table
+var 0618:054B pit_accum word         ; [code] accumulates the PIT divisor; carries at 36.4 Hz
+var 0618:054D clock_frac word        ; [code] +0E11h per 18.2 Hz tick = 1 s per carry
+var 0618:0549 ff_ticks word          ; [code] +1 per flight_forces call (6.07 Hz)
+var 0618:054F clock_sec byte
+var 0618:0550 sec_ticks byte         ; [code] +1 per game second (with clock_sec)
+var 0618:0553 tick18 word            ; [code] 18.2 Hz tick counter
+var 0618:0555 tick_phase byte        ; [code] toggled every 36.4 Hz slow tick; the 18.2 Hz part runs when it becomes 0
+var 0618:0556 ff_divider byte        ; [code] counts 3..1 per 18.2 Hz tick: flight_forces and demo_step when it reaches 0
+var 0618:0559 sound_table table      ; [code] 9 near handler addresses for sound_update, by sound_state: 0 engine, 1 stall horn, 3 guns, 4 bomb, 8 touchdown, 2/5/6/7 none
+var 0618:0573 aileron word           ; [key]
+var 0618:0575 bomb_state word        ; [code] nonzero while a bomb falls
+var 0618:0577 carb_heat byte         ; [key]
+var 0618:0578 elevator word          ; [key]
+var 0618:057A elevator_trim word     ; [key]
+var 0618:057C flaps word             ; [key] 0 / 2000 / 4000 / 6000 / 7FFF
+var 0618:057E gear_down byte         ; [key]
+var 0618:057F editor_key byte        ; [code] bit 7 = new key
+var 0618:0582 lights byte            ; [key]
+var 0618:0583 magnetos byte          ; [key] 0 off, 1 L, 2 R, 3 both, 4 start
+var 0618:0586 radar_zoom dword       ; [key] shifted by -/= when selected_item = 2
+var 0618:058A last_scancodes word    ; [code] Ctrl+Alt+Del detection
+var 0618:058C rudder word            ; [key]
+var 0618:058E selected_item byte     ; [key] 2 radar zoom, 4/5 COM, 6/7 NAV, 8-B transponder, C OBI
+var 0618:058F slew_rate_a word       ; [key]
+var 0618:0591 slew_rate_b word       ; [key]
+var 0618:0593 throttle_target word   ; [code]
+var 0618:0597 throttle word          ; [key] F2 7FFF, F10 0, F4 +0800, F6 +0400, F8 -0800
+var 0618:05B1 key_handlers table     ; [code] word per scancode 01-53h
+var 0618:0659 editor_key_table table ; [code] scancode -> editor key
+var 0618:06A4 obi_course word        ; [key] degrees
+var 0618:07A6 com_freq text          ; [key] ASCII digits
+var 0618:07B1 nav_freq text          ; [key] ASCII digits
+var 0618:07C6 transponder text       ; [key] ASCII digits
+var 0618:0832 air_density word       ; [code] 7FFF - 5*altitude term
+var 0618:0836 angle_of_attack word   ; [code]?
+var 0618:0838 pitch word             ; [code] flight-path pitch
+var 0618:083C bank word              ; [code]
+var 0618:0852 pitch_rate word
+var 0618:0854 roll_rate word
+var 0618:085A turn_rate word
+var 0618:085C drag word
+var 0618:085E accel word
+var 0618:086A frame_dt word          ; [code] timer ticks / 32 since last frame
+var 0618:086F on_ground byte         ; [code] altitude <= 0301h
+var 0618:0870 heading word           ; [code]
+var 0618:0884 lift word
+var 0618:088C inv_mass word          ; [code]?
+var 0618:08A4 thrust word            ; [code] from engine_update
+var 0618:08A8 airspeed word          ; [code] knots = V * 259h / 10000h (about V/109)
+var 0618:08AE airspeed_sq word
+var 0618:08B2 vertical_speed word    ; [code] V * sin(pitch)
+var 0618:08B4 weight word
+var 0618:08B8 cl_left word
+var 0618:08BA cl_right word
+var 0618:092F asi_needle_desc table  ; [code]
+var 0618:09BD needle_quadrant_tbl table
+var 0618:19A3 panel_mask word        ; [code] per-instrument update bits
+var 0618:1D48 sky_pattern word       ; [code] 7777h by day
+var 0618:1D4F horizon_programs table ; [code] one per heading octant
+var 0618:1DC0 engine_rpm byte        ; [code]? drives the IRQ0 rate (engine pitch)
+var 0618:1E27 wind_dx word           ; [code]?
+var 0618:1E29 wind_dy word           ; [code]?
+var 0618:1E51 ammo word              ; [code]? re-armed to 65h on the ground
+var 0618:1E5A war_status_line byte   ; [key]
+var 0618:1EE1 bombs_left byte        ; [code] ASCII digit
+var 0618:1F3B enemy_table table      ; [code] 6 x 29 bytes (enemy_table+9.. names inside 5060..5467 are not these)
+var 0618:2015 editor_row byte
+var 0618:2017 editor_page byte
+var 0618:2034 demo_mode byte         ; [code]
+var 0618:2048 usermode_cur byte
+var 0618:2049 editor_values table    ; [code] 41h bytes: 2049 sound on, 2050 N, 2052 E, 2054 alt, 2056/58/5A pitch/bank/heading, 205C speed, 205E throttle, 2060-2066 controls
+var 0618:204A auto_coordination byte ; [code]
+var 0618:204B slew_mode byte         ; [code]
+var 0618:204E war_mode byte          ; [code] Europe 1917
+var 0618:2068 clock_hour byte
+var 0618:2069 clock_min byte
+var 0618:2916 usermode_slots table   ; [code] 41h bytes per preset, saved to track 26h with 's' in the editor
+var 0618:30C0 clear_pattern word
+var 0618:30C2 scenery_ip word
+var 0618:30C8 draw_colour word       ; [code] nibble pattern pair
+var 0618:30CA capture_mode byte
+var 0618:30D1 pos_east dword         ; [code] axis naming from the editor order (2052 E -> 30D3)
+var 0618:30D5 altitude dword         ; [code] byte 30D5 fraction, word 30D6 integer; ground = 3
+var 0618:30D9 pos_north dword        ; [code] (2050 N -> 30DB)
+var 0618:30EB eye_pos table          ; [code] 3 words
+var 0618:30F1 view_pitch word        ; [code] pitch + 0300h bias + flaps
+var 0618:30F3 view_bank word         ; [code] -bank
+var 0618:30F5 view_heading word
+var 0618:30F7 view_angles table
+var 0618:30FD view_matrix table      ; [code] 3x3 words
+var 0618:3167 proj_params table      ; [code] x scale 4F, y scale CC, centre 50,35
+var 0618:3204 scenery_op_table table ; [code] 43h handlers
+var 0618:3381 sine_table table       ; [code] Q15 cosine quarter wave, 129 words T[0]=7FFFh..T[128]=0 + guard word; filled at run time
+var 0618:3800 clear_words word
+var 0618:3806 view_buf_seg word      ; [code] back buffer segment (0C0C)
+var 0618:380C row_offsets table      ; [code] scanline -> offset (bank interleave)
+var 0618:399C cga_init_table table   ; (port-3D0, value) pairs, 0-terminated
+var 0618:39D7 cga_mode_ctrl byte     ; [code] 1A colour (A, C), 1E B/W (B)
+
+
+# ---- from docs/subphases/3.2.md --------------------
+code 0050:1508 course_digits         ; [code] AL (2-deg units) -> DL hundreds, AX tens/units ASCII
+code 0050:3553 num_digits_b          ; [code] AL -> CL,CH,AX ASCII digits (falls into 3555)
+code 0050:3555 num_to_3digits        ; [code] AX -> CL hundreds, CH tens.. ASCII (div 1000, div 100, AAM)
+var  0618:2012 editor_value          ; [code] 24-bit LE value being converted
+var  0618:202C editor_digits         ; [code] 6 ASCII digits, most significant first
+var  0618:2036 pow10_lo              ; [code] 100000..1 low bytes; mid at 203C, high at 2042
+
+# ---- from docs/subphases/3.3.md --------------------
+var 0618:3802 blit_words0 word      ; [code] words blitted from blit_off0 (bank 0)
+var 0618:3804 blit_words1 word      ; [code] words blitted from blit_off1 (bank 1)
+var 0618:3808 blit_off0 word        ; [code] start offset of the first blit block
+var 0618:380A blit_off1 word        ; [code] start offset of the second blit block (2000h bank)
+
+# ---- from docs/subphases/3.4.md --------------------
+code 0050:5060 draw_poly_edge        ; [code] draw_line while [31D0]: x clamped 1..158, midpoint pixel left out and stored as a fill seed
+code 0050:532C poly_seed_xmajor      ; [code] seed with the neighbour in the row above/below (also 5345)
+code 0050:5372 poly_seed_ymajor      ; [code] seed with the neighbour nibble left/right (also 53AC)
+code 0050:53C6 poly_count_up         ; [code] y-major going up: flip inside side, then poly_count
+code 0050:53D3 poly_count            ; [code] BP = pixels+1; > 3 -> stop at the midpoint first
+code 0050:44FB op_poly_begin         ; [code] opcode 2F: [31D0] = 1, clear edge list 3730
+code 0050:5468 op_poly_end           ; [code] opcode 2D: [31D0] = 0; day: fill spans
+code 0050:549B poly_fill             ; [code] pairs recorded edges per row, fills with fill_pattern
+var 0618:31D0 poly_mode byte         ; [code] 1 between ops 2F and 2D: draw_line records edges
+var 0618:30C4 line_list_ptr word     ; [code] draw_line_list record pointer
+var 0618:3730 poly_edges table       ; [code] edge list for ops 2F/2D
+
+# ---- from docs/subphases/3.6.md --------------------
+code 0050:4737 view_dir_ahead
+code 0050:474A view_dir_ahead_right
+code 0050:4755 view_dir_right
+code 0050:4770 view_dir_rear_right
+code 0050:478A view_dir_rear
+code 0050:4792 view_dir_rear_left
+code 0050:479A view_dir_left
+code 0050:47B5 view_dir_ahead_left
+code 0050:47C1 view_dir_down
+code 0050:47DD fetch_point_p1        ; [code] point at [BX+1] -> eye space 310F + outcode p1
+code 0050:47E3 fetch_point           ; [code] world_to_eye_delta + rotate_point, scenery_ip = after the point
+code 0050:47FA fetch_point_p2        ; [code] same into 311B/3127 + outcode p2
+code 0050:4A82 clip_isect_p1         ; [code] intersection helper for clip_p1_plane
+code 0050:4AAB clip_isect_p2         ; [code] intersection helper for clip_line_planes
+code 0050:4AF7 clip_p1_plane         ; [code] one Cohen-Sutherland step for point 1
+code 0050:3D26 project_dot_regs      ; [code] project_dot with BX, CX, BP = x, y, z
+code 0050:41D1 op_dot_cached         ; [code] opcode 35
+code 0050:4DC6 int0_saturate         ; [code] INT 0 handler: AX = +-7FFF by sign of DX^BX, IRET
+var 0618:3139 xform_in table         ; [code] 3 words, input of rotate_point
+var 0618:315B flat_y word            ; [code] y for ops 40/41 (always 0)
+var 0618:315D flat_flag byte         ; [code] next point has no y operand
+var 0618:315E outcode1 byte
+var 0618:315F outcode2 byte
+var 0618:3162 clip_steps byte
+var 0618:3380 no_normalise_queue byte ; [code] bit 0 -> rotate_point skips normalising
+
+# ---- from docs/subphases/3.7.md --------------------
+code 0050:3D8A op_move_flat          ; [code] opcode 40: move, y = [315B]
+code 0050:3DAF op_line_flat          ; [code] opcode 41: line, y = [315B]
+code 0050:3DDC op_close              ; [code] opcode 29: line back to the last move start
+code 0050:3E47 op_line2d             ; [code] opcode 06: screen-space line (unused)
+code 0050:3E69 op_clear_view         ; [code] opcode 08 (unused)
+code 0050:3E78 op_capture            ; [code] opcode 0D: capture_mode on/off, pointer [30C6] (unused)
+code 0050:3E98 op_proj_scale         ; [code] opcode 0E: proj_params scale/centre (unused)
+code 0050:3EAF op_cga_regs           ; [code] opcode 10: cga_program_regs (unused)
+code 0050:3EB6 op_nop                ; [code] opcode 11
+code 0050:3EBB op_colour             ; [code] opcode 12: draw_colour = solid nibble c
+code 0050:3ED8 op_colour_night       ; [code] opcode 2E: draw_colour = w if time_of_day & 4
+code 0050:3EEC op_colour_dusk        ; [code] opcode 0C: draw_colour = w if time_of_day & 2
+code 0050:3EF4 op_colour_dark_a      ; [code] opcode 1B: 5005h at dusk/night
+code 0050:3F07 op_colour_dark_b      ; [code] opcode 1C: 0002h at dusk/night
+code 0050:3F0C op_store              ; [code] opcode 25: word [v] = imm
+code 0050:3F1A op_if_in              ; [code] opcode 20: skip r unless lo <= [v] <= hi
+code 0050:3F3B op_if_in2             ; [code] opcode 21
+code 0050:3F67 op_if_in3             ; [code] opcode 22
+code 0050:3FA6 op_if_bits            ; [code] opcode 23: skip r unless [v] & mask
+code 0050:3FBE op_jump_if            ; [code] opcode 28: [a] ==/>/< [b] (cond 0/2/4) -> IP += r
+code 0050:3FF0 op_origin             ; [code] opcode 24: local frame origin + shift; sets eye_pos
+code 0050:405F scale_shift           ; [code] DX:AX >> 0/4/8/12/16 by [30DD] via table 316C
+code 0050:4140 op_cache_point        ; [code] opcode 31: transform point into cache slot
+code 0050:415C cache_slot_addr       ; [code] BP = 3288 + 8 * byte [BX+1]
+code 0050:4178 op_move_cached        ; [code] opcode 32
+code 0050:418E op_line_cached        ; [code] opcode 33
+code 0050:41CB op_skip1              ; [code] opcode 34 (unused)
+code 0050:4234 eye_delta_rescaled    ; [code] point at SI - eye_pos, rotated into ES:DI (ops 2A/2B)
+code 0050:43A1 op_dotted             ; [code] opcode 2A: n dots B -> A (unused)
+code 0050:43B4 interp_segment_setup  ; [code] ops 2A/2B: endpoints + 32-bit step / n
+code 0050:4428 interp_segment_step
+code 0050:44BF op_dashed             ; [code] opcode 2B: n/2 dashes B -> A
+code 0050:4517 op_call               ; [code] opcode 18: [31D1] = IP + 3, IP += r
+code 0050:4523 op_return             ; [code] opcode 19: IP = [31D1]
+code 0050:452A op_nav_station        ; [code] opcode 1D
+code 0050:4556 op_com_station        ; [code] opcode 1E
+code 0050:4592 op_copy               ; [code] opcode 1A: [dst] = [src]
+code 0050:45A2 op_demo_script        ; [code] opcode 17: [31E8] = data, IP += r
+code 0050:45B1 op_invalid            ; [code] jmp $ (hang); followed by the text "BADOP"
+code 0050:110C demo_step             ; [code] ~6 Hz in demo mode: next demo-script byte -> key_dispatch
+code 0050:147D nav_search_start      ; [code] [31D5] = 0, [31D3] = 1
+code 0050:1447 nav_tune              ; [code] gate, print NAV digits, [03FF] = BCD, falls into 147D
+code 0050:2FD0 update_time_of_day    ; [code] clock vs season table 1E2C -> time_of_day 1/2/4
+code 0050:4F7D atis_next_char        ; [code] ATIS text stream: 80h+k = fragment k, 00 ends
+code 0050:4FBF atis_start            ; [code] formats runway/temperature/time/wind fields
+code 0050:0742 field_elev_follow     ; [code] [0906] = field_elevation when slow
+code 0050:25D4 marker_lamps          ; [code] shifts out marker flags 1A17/1A1B/1A19
+var 0618:03F2 com_bcd word           ; [code] tuned COM, BCD (124.85 -> 2485h)
+var 0618:03FF nav_bcd word           ; [code] tuned NAV, BCD (109.15 -> 0915h)
+var 0618:0406 ground_service byte    ; [code] scenery: 1 ramp, 2 war home field
+var 0618:0412 time_of_day word       ; [code] 1 day, 2 dusk, 4 night
+var 0618:0416 overlay_fill word      ; [code] fill byte for view_overlay_marks, set by scenery?
+var 0618:041D blink_bits word        ; [code] rotated every frame; scenery tests it for flashing lights
+var 0618:0571 demo_ptr word          ; [code] current demo-script byte
+var 0618:0900 alt_display word       ; [code] altitude word + [0906], used for the band marker
+var 0618:0906 ground_elev word       ; [code] B4h at Meigs
+var 0618:090A field_elevation word   ; [code] metres, stored by scenery per airport
+var 0618:0915 wind_dir_offset word
+var 0618:0917 wind_gust_offset word
+var 0618:1A19 marker_a byte          ; [code] marker beacon flag set by scenery
+var 0618:1A1B marker_b byte          ; [code] marker beacon flag set by scenery
+var 0618:1A1D ils_param word         ; [code] set by scenery after an ILS station (glide slope?)
+var 0618:1A1F ils_course word        ; [code] localizer course, set by scenery
+var 0618:1D4A ground_pattern word    ; [code] BBBBh by day
+var 0618:1E24 utc_offset word        ; [code] hours, set per area (ATIS Zulu time)
+var 0618:1E53 bomb_score word        ; [code] scenery, while over a target
+var 0618:30C6 capture_ptr word       ; [code] next capture record
+var 0618:30DD scenery_scale byte     ; [code] op 24 shift selector 0/2/4/6/8
+var 0618:30DF scenery_origin table   ; [code] east, up, north dwords (16.16)
+var 0618:3159 colour_byte word       ; [code] op 12 colour in both nibbles
+var 0618:3163 move_pending byte      ; [code] next line starts at the pen
+var 0618:316C scale_shift_table table ; [code] op 24 shift handlers
+var 0618:3176 compare_table table    ; [code] op 28: je / jg / jl
+var 0618:31CE fill_pattern word      ; [code] polygon fill word (op 2D)
+var 0618:31D1 scenery_return word    ; [code] op 18/19 return address (one level)
+var 0618:31D3 nav_search byte        ; [code] request; copied to 31D4 per interpreter pass
+var 0618:31D5 nav_found byte         ; [code] station record at 31D6 valid
+var 0618:31D6 nav_station table      ; [code] east, north dwords
+var 0618:31DE com_search byte        ; [code] request; copied to 31DF per pass
+var 0618:31E0 com_station table      ; [code] 4 runways by wind quadrant, 4 temperatures by season
+var 0618:31E8 demo_script word       ; [code] start of the area's demo script (op 17)
+var 0618:31EA display_colours table  ; [code] sky/ground words per display type, from startup_menus
+var 0618:3288 point_cache table      ; [code] 8 bytes per slot: eye x, y, z, outcode
+var 0618:3626 atis_ptr word          ; [code] next ATIS byte
+var 0618:3628 atis_idle byte         ; [code] 0 while a message runs
+var 0618:362D atis_fragments table   ; [code] 14 fragment pointers
+
+# ---- from docs/subphases/3.10.md --------------------
+code 0050:1DE8 draw_needle2          ; [code] AL = angle, AH bit0 = force redraw, CX = descriptor; sprites DS:098F
+code 0050:1DDA needle_check_same     ; [code] cmp code,[bx+4]: equal -> pops and returns from draw_needle
+code 0050:1EE3 needle_redraw_second  ; [code] if [090F]: draw_needle2 of [090D] at its +9 angle
+code 0050:1F63 needle_erase          ; [code] restores the needle drawn at BX from the clean panel copy
+code 0050:20E0 alt_band_marker       ; [code] if [0914]: erase 13AC, blit_sprite record [13B8 + 2*([0900]/5F5)]
+code 0050:4DE0 blit_sprite           ; [code] ES=B800; blit_or with record DS:BX (+0 offset, +2 size, +4 words)
+var 0618:0904 needle2_force byte     ; [code] AH of draw_needle2
+var 0618:090D second_needle_desc word ; [code] descriptor redrawn after draw_needle (0943)
+var 0618:090F needle_redraw2 byte    ; [code] AH of draw_needle
+var 0618:0910 needle_row_step word   ; [code] row step from an even line (1FB0 up / 2000 down)
+var 0618:0912 needle_row_step2 word  ; [code] row step from an odd line (E000 up / E050 down)
+var 0618:0914 alt_band_on byte       ; [code] set by upd_altimeter around draw_needle
+var 0618:0961 needle_sprites table   ; [code] sprite pointers for draw_needle, by direction 0..3F
+var 0618:098F needle2_sprites table  ; [code] sprite pointers for draw_needle2
+var 0618:12B4 cga_mirror_tbl table   ; [code] bit-reversal of 2-bpp pixels (mirrored needles)
+var 0618:13B8 alt_band_sprites table ; [code] 5 blit_sprite records
+var 0618:1400 indicator_force byte   ; [code] forced-redraw counter for draw_indicator
+var 0000:0122 panel_copy_seg word    ; [code] segment of the clean panel copy (erase source)
+
+
+# ---- from docs/subphases/3.9.md --------------------
+code 0050:121A fmt_signed_dec_print  ; [code] CX=8888, ES=[view_buf_seg], jumps into print_str_mask's loop (1233)
+code 0050:5CCD set_reloc_args        ; [code] ES=0618, CX=3A84 (data segment size), SI=DI=BP=0 for store_ds_for_isr
+
+
+# ---- from docs/subphases/3.13.md --------------------
+var 0618:0834 pitch_to_speed word    ; [code] pitch_rate*[08E2]>>8, added to airspeed
+var 0618:083E gear_drag word         ; [code] [08CA] gear down / [08CC] gear up
+var 0618:0840 cos_pitch word
+var 0618:0844 cos_bank word
+var 0618:0848 weight_normal word     ; [code] weight*cos(pitch)
+var 0618:084A cross_control word     ; [code] aileron/2 - rudder/2
+var 0618:084C slip_yaw word
+var 0618:084E slip_cl word           ; [code] extra left-wing CL from crossed controls
+var 0618:0850 cos2_bank word         ; [code] cos(bank)*|cos(bank)|
+var 0618:0856 lift_horiz word        ; [code] lift*sin(bank), write only
+var 0618:0862 elev_aoa word          ; [code] elevator*[08DA]
+var 0618:0864 net_force word         ; [code] thrust - drag
+var 0618:0866 flaps_drag word
+var 0618:0872 slip_drag word
+var 0618:087A aileron_cl word        ; [code] aileron*[08F2]
+var 0618:087C cl_aoa word
+var 0618:087E cl_ofs_left word
+var 0618:0880 cl_ofs_right word
+var 0618:0882 flaps_cl word
+var 0618:0886 lift_left word
+var 0618:0888 lift_right word
+var 0618:0892 roll_moment word       ; [code] from flight_forces
+var 0618:089A sin_pitch word
+var 0618:089C crab_a word            ; [code] track = heading + hi([089C] * [08A2])
+var 0618:08A0 weight_along word      ; [code] weight*sin(pitch), part of drag
+var 0618:08A2 crab_b word
+var 0618:08A6 normal_force word
+var 0618:08AA inv_airspeed word      ; [code] div_q15(0280:0000, airspeed)
+var 0618:08AC pitch_accel word
+var 0618:08B0 accel_to_pitch word
+var 0618:0558 stalled byte           ; [code] write only
+var 0618:1E83 wing_damage byte
+
+
+# ---- from docs/subphases/3.14.md --------------------
+code 0050:1BB0 war_ground_reset      ; [code] repair, refuel, enemies to state 1
+code 0050:1CEC slew_to_editor_pos    ; [code] pos_north/east integer + 4000h -> 2050/2052
+code 0050:1CFF slew_speed            ; [code] control word -> 2^n-1 style speed, AX, DX = sign
+code 0050:2EDB engine_stop           ; [code] 1DD6 = 0, 1DCB = 0, running = 0
+code 0050:2EEC engine_rpm_step       ; [code] engine_rpm one step toward 1DC1, reprograms the PIT (20C0)
+code 0050:3C9F alt_from_editor       ; [code] altitude = (editor feet + 9) * 0.305 - [0906], min 3
+var 0618:0830 climb_step word        ; [code] altitude change this frame
+var 0618:083A view_pitch_trim word   ; [code] hi(AX * [08C6]); AX is a leftover (original bug)
+var 0618:0842 horiz_step word
+var 0618:0846 cos_track word
+var 0618:0860 east_step word
+var 0618:0868 flaps_view word        ; [code] view pitch term, airborne only
+var 0618:086C frame_dist word        ; [code] airspeed * dt
+var 0618:086E on_ground_prev byte
+var 0618:088A touchdown_view word    ; [code] vs_high << 9 on touchdown
+var 0618:088E mass_term2 word        ; [code] [08C2] / weight
+var 0618:0890 inv_roll_inertia word  ; [code] [08C4] / weight
+var 0618:0894 north_step word
+var 0618:0896 prev_time dword        ; [code] tick18:pit_accum of the last frame
+var 0618:089E sin_track word
+var 0618:08B6 fuel_weight word
+var 0618:08C0 mass_constants table   ; [code] 0329, 02BC, 2EE0
+var 0618:08D6 level_rate_pos word    ; [code] +14h
+var 0618:08D8 level_rate_neg word    ; [code] -14h
+var 0618:08E0 thrust_k word          ; [code] 0468h
+var 0618:08EE empty_weight word      ; [code] 09C4h
+var 0618:08F6 not_slew byte          ; [code] 1 after a normal frame; slew centres the controls once
+var 0618:08F9 alt_reset byte         ; [code] 0C after editor_apply_state; frames re-applying the editor altitude
+var 0618:0902 ias_knots word         ; [code] airspeed * 28Fh >> 16 (upd_airspeed)
+var 0618:1DC1 rpm_target byte
+var 0618:1DC2 engine_power word
+var 0618:1DC4 oil_temp_rate word
+var 0618:1DC6 oil_press_rate word
+var 0618:1DC8 engine_faults byte     ; [code] 1 oil leak, 2 no oil pressure (1|2 cap power 0FFF), 4/8 tank leaks
+var 0618:1DC9 fuel_flow byte         ; [code] FF; x throttle high byte per call
+var 0618:1DCA carb_ice byte          ; [code] 14h from sub_04FB (season 2, low throttle)
+var 0618:1DCB rpm_deficit byte
+var 0618:1DCC fuel_left 24-bit       ; [code] gauge byte 1DCE
+var 0618:1DCF fuel_right 24-bit      ; [code] gauge byte 1DD1
+var 0618:1DD2 mag_switches word      ; [code] L, R
+var 0618:1DD4 mag_ok word            ; [code] L, R
+var 0618:1DD6 engine_sound word      ; [code] A140h running
+var 0618:1DD8 engine_running byte
+var 0618:1DD9 oil_temp word
+var 0618:1DDB oil_press word
+var 0618:1DDD rpm_by_power table     ; [code] 32 bytes, by power >> 10
+var 0618:1DFD rpm_windmill table     ; [code] 32 bytes, by IAS >> 4
+var 0618:1E22 takeoff_spot word
+var 0618:1E26 turbulence byte
+var 0618:1E2B gust_phase byte
+var 0618:204C reality_mode byte
+var 0618:206A season byte
+var 0618:2073 shear_tops table       ; [code] 3 words, altitude units at run time
+var 0618:2079 wind_layers table      ; [code] 4 x (speed lo / turbulence hi, direction): 3, 2, 1, surface
+
+
+# ---- from docs/subphases/3.11.md --------------------
+code 0050:037E upd_turn              ; [code] turn_rate -> sprite DS:16DD[-6..6] (state [0403])
+code 0050:04A5 turn_clear            ; [code] clears 3 words x 13 rows from B800:1AE4
+code 0050:1375 heading_readout       ; [code] 3 heading digits at [0799], print_str_mask 5555h
+code 0050:151C clock_text            ; [code] seconds; minute roll -> 1540
+code 0050:1540 clock_hm              ; [code] minutes, hours, update_time_of_day
+code 0050:1577 text_07c5             ; [code] print_str_dim 07C5 behind panel_text_gate
+code 0050:1582 switch_text           ; [code] gear/lights/magnetos/carb labels
+code 0050:207C upd_vsi               ; [code] vertical_speed history 091B (10 words) -> draw_needle2 094D
+code 0050:20C0 upd_tach              ; [code] [1DC0]*3B6h>>8 + 8Ah -> draw_needle2 0957
+code 0050:2231 mask_apply            ; [code] per changed panel_mask bit: 5AD7 clear or 5AF3 + call [rec+4]
+code 0050:2419 obi_update            ; [code] redraw OBI needles, flag, markers
+code 0050:240E obi_check             ; [code] -> obi_update if [1A10] != [1A11]
+code 0050:2474 obi_needle            ; [code] OR localizer needle n (records 1A25, patterns 1B04)
+code 0050:24B9 obi_glide_bar         ; [code] glide slope bar at line n+7Ah
+code 0050:24D6 obi_flag_text         ; [code] TO/FROM text by [1A14]
+code 0050:24F4 obi_restore           ; [code] OBI face from segment [3806]
+code 0050:2620 attitude_fast         ; [code] 262C if |roll_rate| > 500h
+code 0050:262C attitude              ; [code] attitude indicator
+code 0050:293F ai_span               ; [code] fill columns DH..DL of row CL with colour pair DS:1CEB+BL
+code 0050:2A3E bank_pointer          ; [code] XOR bank dots (angles DS:1D31, positions DS:1CEF)
+code 0050:5B88 xor_dot               ; [code] XOR pattern DS:3A00 at row BL, column CX
+var 0618:1A10 loc_needle byte        ; [code] drawn localizer needle 0..3C
+var 0618:1A12 gs_needle byte         ; [code] drawn glide slope 0..18
+var 0618:1A14 nav_flag byte          ; [code] 0 off, 1 TO, 2 FROM
+var 0618:1B22 ai_rows word           ; [code] 9876h: attitude rows 76h..98h
+var 0618:1BAB ai_row_records table   ; [code] 8 bytes per row: +1/+2 edges, +3/+4 colour, +5/+6 horizon column
+var 0618:1B27 bank_ptr_pos byte      ; [code] drawn bank pointer ([1B28] = drawn flag)
+var 0618:08F7 ball_value word        ; [code] turn coordinator ball
+
+
+# ---- from docs/subphases/3.12.md --------------------
+code 0050:14C9 obi_readout           ; [code] OBI course and reciprocal digits (print_str2)
+code 0050:2290 nav_compute           ; [code] VOR/localizer deviation, TO/FROM, glide slope
+code 0050:2525 nav_bearing           ; [code] BX=east, CX=north -> DX bearing 0..437h
+code 0050:2598 atan_cot              ; [code] CX/BX then 25A6
+code 0050:259F atan_tan              ; [code] BX/CX then 25A6 (table 1AE2)
+code 0050:4E53 atis_tick             ; [code] ATIS scroller, from int8_timer
+code 0050:4F68 atis_copy_line        ; [code] rotated copy of a 50h-byte line
+var 0618:06A0 hdg_display word       ; [code] heading indicator value
+var 0618:0919 alt_m word             ; [code] altitude word (upd_altimeter), glide slope
+var 0618:1A11 loc_target byte        ; [code] target, 1E centred
+var 0618:1A13 gs_target byte         ; [code]
+var 0618:1A15 nav_flag_drawn byte    ; [code]
+var 0618:1A16 marker_state byte      ; [code] bits: 0 outer 1A19, 1 middle 1A1B, 2 inner 1A17
+var 0618:1A17 marker_inner byte      ; [code] never set in 1.05
+var 0618:1A21 nav_dn word            ; [code] north offset from station, 16 m units
+var 0618:1A23 nav_de word            ; [code] east offset
+var 0618:1AE2 atan_table table       ; [code] 17 words, 0..870h
+var 0618:1A25 obi_needle_recs table  ; [code] 61 x 3 bytes
+var 0618:3490 atis_seg word          ; [code] screen segment of the ATIS band
+var 0618:3492 atis_lines table       ; [code] 5 x 50h ring buffers
+var 0618:3622 atis_ring_a word       ; [code]
+var 0618:3624 atis_ring_b word       ; [code]
+var 0618:3629 atis_idle_count byte   ; [code]
+var 0618:362A atis_in_fragment byte  ; [code]
+var 0618:362B atis_frag_ptr word     ; [code]
+
+
+# ---- from docs/subphases/3.17.md --------------------
+code 0050:3308 war_scope_clear       ; [code] clears the panel scope B800:17A8 (22x23 bytes) and its centre mark
+code 0050:33C2 war_status            ; [code] status line; BEGIN WAR!! and its pause
+code 0050:3575 war_score_add         ; [code] AX added to score [1E57], digits to 1EC5
+code 0050:326A enemy_delta_home      ; [code] SI = home position; delta to 1E6F..1E77
+code 0050:327F enemy_delta_player    ; [code]
+code 0050:32CB enemy_distance        ; [code] CX:BP = |dE|+|dA|+|dN|
+code 0050:334A enemy_scope_mark      ; [code] enemy dot on the panel scope, [BX+9]
+code 0050:35AB war_explosion         ; [code] CL dots, colour [1E55], offsets from DS:0830
+code 0050:35DB war_damage            ; [code] damage by hits [1E5C] and kills [1E50]
+code 0050:5BAA enemy_sprite          ; [code] AH = x, CL = y, SI = size*2; sprites via table DS:3A10
+code 0050:5C63 cga_line_up           ; [code] BX one line up in the interleave
+var 0618:1E50 kills byte
+var 0618:1E55 explosion_colour word
+var 0618:1E57 score word
+var 0618:1E59 war_active byte
+var 0618:1E5C hits_taken byte
+var 0618:1E78 enemy_fire byte
+var 0618:1E7A in_range_msg byte
+var 0618:1E7C gun_burst byte
+var 0618:1E81 bullet_timer byte
+var 0618:1E82 status_msg byte
+
+
+# ---- from docs/subphases/3.5.md --------------------
+var 0618:1D40 band_patterns table    ; [code] 4 words: above / sloped-left / sloped-right / below patterns of horizon_fill
+var 0618:1D4C horizon_x_limit byte   ; [code] x/2 threshold choosing the horizon_fill fill path
+var 0618:1D4D horizon_slope word     ; [code] 8.8 boundary step per row (fill_sloped_horizon)
+
+
+# ---- from docs/subphases/3.15.md (names the natives used for raw offsets) --------------
+var 0618:03C2 screen_seg word        ; [code] B800h: CGA segment, also the track buffer of boot_read_track
+var 0618:0599 view_not_forward byte  ; [code] nonzero: no gun sight, enemy marks or bullets drawn
+var 0618:07B9 obi_readout_rec table  ; [code] print_str record of the OBI readout: +2 course digits, +8 reciprocal
+var 0618:0874 drag_coef word        ; [code] CL_left^2 + CL_right^2 + slip + flaps
+var 0618:0876 drag_scaled word       ; [code] drag_coef * [08CE]
+var 0618:0878 drag_total word        ; [code] drag_scaled + gear_drag
+var 0618:08BC cl2_left word          ; [code] cl_left^2
+var 0618:08BE cl2_right word         ; [code] cl_right^2
+var 0618:08C6 view_trim_k word       ; [code] constant: view_pitch_trim = hi(AX * [08C6])
+var 0618:08C8 cl0 word               ; [code] constant: base lift coefficient of the wing
+var 0618:08CE drag_scale word        ; [code] [signed] constant
+var 0618:08E2 pitch_to_v_k word      ; [code] [signed] constant: pitch_to_speed = pitch_rate * [08E2] >> 8
+var 0618:08E6 turn_gain word         ; [code] [signed] constant
+var 0618:08E8 accel_to_pitch_k word  ; [code] [signed] constant: accel_to_pitch = accel * [08E8] >> 8
+var 0618:08EC friction word          ; [code] [signed] constant: drag added whenever the aircraft moves
+var 0618:08F0 lift_slope word        ; [code] [signed] constant: cl_aoa = AoA * [08F0]
+var 0618:1E6F delta_east 24-bit      ; [code] war: target - enemy, east
+var 0618:1E72 delta_alt 24-bit       ; [code] war: target - enemy, altitude
+var 0618:1E75 delta_north 24-bit     ; [code] war: target - enemy, north
+var 0618:1E79 in_range byte          ; [code] war: an enemy is within gun range
+var 0618:1E7B status_phase byte      ; [code] war: status line phase
+var 0618:1E7D bullet_last word       ; [code] war: last bullet record
+var 0618:1E7F gun_side byte          ; [code] war: alternates the gun (left / right)
+var 0618:2050 editor_north word      ; [code] editor_values+7: N, the integer word of pos_north
+var 0618:2052 editor_east word       ; [code] editor_values+9: E, the integer word of pos_east
+var 0618:2054 editor_alt word        ; [code] editor_values+0B: altitude (feet)
+var 0618:310F eye_p1 table           ; [code] eye-space point 1: x, y, z words (view_matrix+18)
+var 0618:311B eye_p2 table           ; [code] eye-space point 2: x, y, z words
+var 0618:3127 eye_p3 table           ; [code] eye-space point 3: x, y, z words
+
+# ---- from docs/subphases/3.16.md (editor, presets, start-up disk check) --------------------
+code 0050:368A editor_next_row       ; [code] cursor down one row (Enter, =); past row 2Ch: next page, page 4 wraps to 0
+code 0050:369F editor_first_page     ; [code] page 0: page text, fields, cursor on row 2
+code 0050:36C1 editor_prev_row       ; [code] cursor up one row ('-'); above row 2: other page, row 2Ch
+code 0050:36E3 editor_cursor_clear   ; [code] blanks the "-->" cursor of editor_row
+code 0050:36F4 editor_row_ptr        ; [code] BX = [editor_row_offsets + editor_row] (row not doubled), also to [2020]
+code 0050:3909 editor_page_text      ; [code] 1000 bytes DS:SI -> ES:0 as text cells with attribute 0Fh
+code 0050:3916 editor_commit         ; [code] after typing: read fields, then user-mode recall / store by the User mode field
+code 0050:39B2 editor_field_next     ; [code] next {width, row, value} record of the page's field list -> 2015, 2020, 2022
+code 0050:39DB editor_draw_page      ; [code] editor_page_text of editor_page_texts[editor_page]
+code 0050:3B29 speaker_off           ; [code] spk_pattern = 0, port 61h bits 0-1 cleared
+code 0050:3C2F editor_scale_values   ; [code] DI = 0: internal -> editor units (capture), DI = 1: back (apply); winds, clouds, shears
+code 0050:3C6C editor_scale_wind     ; [code] wind layer at BX: DI = 0 speed+100*turbulence, direction to degrees; DI = 1 back (DIV can overflow -> INT 0)
+code 0050:4DC6 int0_divide_error     ; [code] AX = 7FFFh (8001h if DX^BX < 0), IRET to the instruction after the DIV
+code 0050:60F8 startup_disk_reset    ; [code] disk_reset; CL = 0; DI = SI = 40B0h + DS*16; ES = AX = 0
+var 0618:03B0 stream_pos word        ; [code] byte index in the 4 KB track buffer (B800); 0FFF: read a track next, FFFF: write
+var 0618:03B2 track_verify byte      ; [code] bit 0 set by disk_format_write_track: checksum read-back after the write
+var 0618:03C0 disk_dx word           ; [code] DX of the INT 13h calls (drive 0, head 0)
+var 0618:03C5 format_table table     ; [code] 8 x {track, head, sector, size} for INT 13h AH=05
+var 0618:0547 spk_restart byte       ; [code] 1 from editor_apply_state: the timer handler restarts the engine note once (sound on)
+var 0618:2010 editor_up byte         ; [code] '-' pressed: editor_main moves the cursor up
+var 0618:2011 editor_exit byte       ; [code] Esc pressed: editor_main leaves through editor_apply_state
+var 0618:2018 editor_typed byte      ; [code] digits typed in the field (editor_main then calls editor_commit)
+var 0618:2020 editor_ptr word        ; [code] row screen offset (editor_row_ptr), value address (field_next) or preset slot address
+var 0618:2022 editor_field_scr word  ; [code] screen offset of the field's digits (row offset + 0Ah)
+var 0618:2024 editor_digit byte      ; [code] last digit typed
+var 0618:2026 editor_field_rec word  ; [code] current record of the page's field list
+var 0618:2028 editor_saved_row byte  ; [code] editor_row kept across editor_commit / redraws
+var 0618:202A apply_phase byte       ; [code] (frame_counter & 1Fh) - 10h, set by editor_apply_state (read at 4FCE)
+var 0618:202B editor_ndigits byte    ; [code] digits typed so far
+var 0618:2032 editor_cell word       ; [code] text cell of the next digit (5..0Ah; times 2 = byte offset)
+var 0618:2035 demo_request byte      ; [code] start-up menu choice A (demo): ORed into demo_mode by editor_apply_state
+var 0618:204D editor_demo byte       ; [code] editor field "Demonstration mode"
+var 0618:204F comm_rate byte         ; [code] editor field "Communication rate", added to [0542] by the timer handler (ATIS)
+var 0618:206B cloud_tops table       ; [code] cloud layer 2 tops / bottoms, layer 1 tops / bottoms (4 words, then shear_tops)
+var 0618:2089 reliability byte       ; [code] editor field "Reliability factor"
+var 0618:208A editor_usermode byte   ; [code] editor field "User mode": 0-9 recall, same again stores to n+10, 110-129 store to n-100
+var 0618:208E editor_field_lists table ; [code] 2 words: field list of page 0 and page 2; records {width, row, offset from 2049}, 0 ends
+var 0618:2110 editor_page_texts table ; [code] 2 words: 40x25 text of page 0 and page 2
+var 0618:28E4 editor_row_offsets table ; [code] text-screen offset per row byte index (2 per line: 32h, 82h, ...)
+var 0618:3A21 backup_option byte     ; [code] 1 as shipped: a master disk offers the backup; check_master_disk read errors count as a copy
+
+# ---- 3.18 keyboard and controls ----------------------------------------------------------
+code 0050:0955 controls_redraw       ; [code] trim, elevator, flaps, throttle, aileron and rudder indicators
+code 0050:0A19 magnetos_store        ; [code] magnetos = AH, then switch_text
+code 0050:0D01 gear_drag_update      ; [code] gear_drag from gear_down, then switch_text
+code 0050:0E15 key_flaps_10          ; [key] F3
+code 0050:0E1D key_flaps_20          ; [key] F5
+code 0050:0E25 key_flaps_30          ; [key] F7
+code 0050:0E2D key_flaps_40          ; [key] F9
+code 0050:0E6A throttle_indicator    ; [code] draws ind_throttle from throttle
+code 0050:0F25 elevator_update       ; [code] ind_elevator, elev_aoa
+code 0050:0F8A aileron_rudder_update ; [code] aileron_update, then rudder_update
+code 0050:0FA3 aileron_update        ; [code] rudder = aileron under auto-coordination, both indicators
+code 0050:0FB3 aileron_indicator     ; [code] ind_aileron, aileron_cl, control_coupling
+code 0050:0FE2 rudder_update         ; [code] aileron = rudder under auto-coordination, both indicators
+code 0050:0FF2 rudder_indicator      ; [code] ind_rudder, control_coupling
+var 0618:03F9 dg_offset word         ; [code] gyro drift: heading_readout shows view_heading + this - wind offsets; 03F8-03FA += FFh at 0563; 'D' sets it so the gyro matches hdg_display (the compass)
+var 0618:0418 enter_unhooks byte     ; [code] nonzero: Enter restores the BIOS int 8/9 vectors and the PIT (0 in all traces)
+var 0618:0551 key_recent byte        ; [code] 18.2 Hz ticks left: 12h after C/N/T, 8 after KP8/KP2, 0 after -/=, counted down at 07F8; nonzero: C/N/T pick the next field, elevator steps 8x
+var 0618:0595 bda_seg word           ; [code] 0040h, for the Ctrl+Alt+Del warm-boot flag 0040:0072 = 1234h
+var 0618:059B view_dir_fn word       ; [code] view routine from view_dir_fns, chosen by a keypad key after Scroll Lock
+var 0618:05A1 view_dir_fns table     ; [code] 9 view routines by keypad key index / 2 (KP8, KP9, KP6, KP3, KP2, KP1, KP4, KP7, KP5)
+var 0618:08CA gear_drag_down word    ; [code] constant: gear_drag with the gear down (and on the ground)
+var 0618:08CC gear_drag_up word      ; [code] constant: gear_drag with the gear up
+var 0618:08DA elevator_aoa_k word    ; [code] [signed] constant: elev_aoa = elevator * [08DA] >> 15
+var 0618:08DC flaps_drag_k word      ; [code] constant: flaps_drag = flaps * [08DC] >> 16
+var 0618:08DE flaps_view_k word      ; [code] [signed] constant: flaps_view = flaps * [08DE] >> 16
+var 0618:08F2 aileron_cl_k word      ; [code] [signed] constant: aileron_cl = aileron * [08F2] >> 16
+var 0618:08F4 flaps_cl_k word        ; [code] constant: flaps_cl = flaps * [08F4] >> 16
+var 0618:1E20 altimeter_offset word  ; [code] added to the altimeter reading (upd_altimeter); moves by 1 towards takeoff_spot (0551); 'A' clears both
+var 0618:143D ind_aileron table      ; [code] draw_indicator descriptor (3.10); byte +6 = position
+var 0618:1449 ind_rudder table       ; [code] draw_indicator descriptor; byte +6 = position
+var 0618:1455 ind_elevator table     ; [code] draw_indicator descriptor; byte +6 = position
+var 0618:1461 ind_throttle table     ; [code] draw_indicator descriptor; byte +6 = position
+var 0618:146D ind_flaps table        ; [code] draw_indicator descriptor; byte +6 = position
+var 0618:1479 ind_trim table         ; [code] draw_indicator descriptor; byte +6 = position

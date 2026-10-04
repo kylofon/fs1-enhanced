@@ -646,10 +646,8 @@ static void text_draw(SDL_Renderer *r)
     static SDL_FColor ncol[16];
     static bool ncol_ready;
     if (!ncol_ready) {
-        for (int n = 1; n < 16; n++) {
-            uint8_t nib[2] = { (uint8_t)n, (uint8_t)n };
-            ncol[n] = pattern_colour(nib, 2);
-        }
+        for (int n = 1; n < 16; n++) /* no composite colour fringes: white, or grey for dim text (one bit per nibble) */
+            ncol[n] = n == 15 ? (SDL_FColor){ 1, 1, 1, 1 } : (SDL_FColor){ 0.65f, 0.65f, 0.65f, 1 };
         ncol_ready = true;
     }
     n_verts = n_idx = n_hair = 0;

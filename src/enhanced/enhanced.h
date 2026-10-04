@@ -10,6 +10,8 @@ typedef struct {
     const char *dump_dl; /* --dump-dl FILE: write the recorded 3D view frames as text (S1.2) */
     bool dl_check;       /* --dl-check: list back-buffer writers without a display-list hook (S1.2) */
     bool sharp;          /* sharp 3D view (S1.3): default on; F11 cycles sharp / composite / RGB */
+    bool start_set;      /* --start N: once the menus are over, recall user mode N (0..9) in the editor */
+    int start_mode;
     bool original_code;  /* --verify / --native-off: original code runs, nothing is recorded */
 } EnhOptions;
 

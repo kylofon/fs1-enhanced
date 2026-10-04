@@ -10,6 +10,11 @@ EnhOptions enh;
 bool enh_parse_arg(int argc, char *argv[], int *i)
 {
     (void)argc;
+    if (SDL_strcmp(argv[*i], "--start") == 0 && *i + 1 < argc) {
+        enh.start_mode = SDL_atoi(argv[++*i]);
+        enh.start_set = enh.start_mode >= 1 && enh.start_mode <= 9; /* 0 is the game's own start */
+        return true;
+    }
     if (SDL_strcmp(argv[*i], "--classic") == 0) {
         enh.classic = true;
         return true;

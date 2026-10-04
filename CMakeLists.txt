@@ -54,3 +54,9 @@ if(MSVC)
 else()
     target_compile_options(fs1 PRIVATE -Wall -Wextra)
 endif()
+
+# ENH: the launcher ("FS1 Enhanced.exe", wxWidgets): the disk image, start location, display and sound options.
+option(FS1_LAUNCHER "Also build the launcher, FS1 Enhanced.exe (wxWidgets)" ON)
+if(FS1_LAUNCHER)
+    add_subdirectory(launcher)
+endif()

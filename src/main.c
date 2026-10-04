@@ -68,6 +68,7 @@ typedef struct App {
     float samples[AUDIO_RATE / 5];
     Disk disk;
     Pc *pc;
+    long start_frame;        /* ENH: --start: frame at which the editor keys were scheduled (0 = not yet) */
     SDL_Surface *sharp_shot; /* ENH: last sharp frame read back for --screenshot */
 
     uint64_t last_ticks;
@@ -341,6 +342,24 @@ static void parse_keys(App *app, const char *list)
         app->key_count++;
     }
     SDL_free(copy);
+}
+
+/* ENH: --start N. Once the start-up menus are over (the game's frame counter is running) press Esc, type the user
+ * mode and Esc again, as the campaign sessions do: the editor recalls the preset (position, time, weather). */
+static void start_mode_tick(App *app)
+{
+    if (!enh.start_set || app->start_frame || !app->pc)
+        return;
+    const uint8_t *fc = app->pc->cpu.mem + cpu_linear(GAME_DS, 0x03F6); /* frame_counter */
+    unsigned frames = (unsigned)(fc[0] | fc[1] << 8);
+    if (frames < 3 || frames > 200) /* 0 or boot leftovers while the menus run; counts up in flight */
+        return;
+    long s = app->frame + 30;
+    char list[160];
+    SDL_snprintf(list, sizeof list, "%ld:Escape*2,%ld:%d*2,%ld:Return*2,%ld:Escape*2", s, s + 40, enh.start_mode, s + 60,
+                 s + 100);
+    parse_keys(app, list);
+    app->start_frame = s;
 }
 
 static void run_key_script(App *app)
@@ -775,6 +794,7 @@ SDL_AppResult SDL_AppIterate(void *appstate)
             type_char(pc, app->type_text[i]);
     }
 
+    start_mode_tick(app); /* ENH */
     run_key_script(app);
     run_poke_script(app);
     if (app->stats && app->frame == app->stats_from && !pc->cpu.exec_count) {

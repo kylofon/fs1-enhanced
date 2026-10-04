@@ -89,7 +89,7 @@ window size. The CGA path stays as the authentic mode (`--classic`, or toggled i
 | Id | Task | Model | Size | Status |
 |---|---|---|---|---|
 | S5.1 | Settings and save state: `fs1.ini` (display mode, aspect, scale, audio, controls), F5/F9 quick save/load of the whole game state (memory array + registers) | S | M | |
-| S5.2 | Launcher "FS1 Enhanced" (required, like the other ports) from `../StreetRodEnhanced/launcher/` (wxWidgets), adapted: disk image instead of a game folder, all options of S1–S5.1 (palette, scaling, smooth frame rate, gamepad, audio), key bindings; no "classic" entry (D2); built by default, `-DFS1_LAUNCHER=OFF` to skip | S | M | |
+| S5.2 | Launcher "FS1 Enhanced" (required, like the other ports) from `../StreetRodEnhanced/launcher/` (wxWidgets), adapted: disk image instead of a game folder, all options of S1–S5.1 (palette, scaling, smooth frame rate, gamepad, audio), key bindings; no "classic" entry (D2); built by default, `-DFS1_LAUNCHER=OFF` to skip | S | M |partial 2026-10-04: `launcher/` (disk image, start location = user mode via `--start N`, line width, RGB, sound); the other options when their subtasks exist |
 | S5.3 | First release: `tools/package.py` (repo URL, launcher in the zip), README with screenshots taken by the user, CHANGELOG, make https://github.com/kylofon/fs1-enhanced public + GitHub release (user approves) | H | S | |
 
 Notes:

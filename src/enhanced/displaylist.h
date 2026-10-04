@@ -89,6 +89,10 @@ const DlSnap *dl_view_snap(void);
 void dl_set_dump(const char *path);
 void dl_set_check(void);
 
+/* S2.2: the glyph rows the text drawer wrote into the screen (video RAM byte offset -> the word written).
+ * Retained until the back end finds that video RAM no longer holds them (it clears ok[off] then). */
+bool dl_text_rows(uint16_t **w, uint8_t **ok);
+
 /* ---- hooks (called by the natives; each is one ENH: line in the engine) --------------------- */
 
 /* Projection (scenery.c f_4D18/f_4CA3/f_4D56): stage the float coordinates of the line about to be
@@ -116,6 +120,8 @@ void dl_poly_begin_(Pc *pc);
 void dl_span_fill_(Pc *pc);
 void dl_poly_end_(Pc *pc);
 void dl_commit_view_(Pc *pc);
+/* print_str family (textdraw.h): one glyph row word w written at es:di. Only B800 is kept. */
+void dl_text_row_(Pc *pc, uint16_t es, uint16_t di, uint16_t w);
 
 #define DL_HOOK(call) do { if (dl_on) call; } while (0)
 static inline void dl_stage_p1(Pc *pc, bool from_prev, uint16_t sw) { DL_HOOK(dl_stage_p1_(pc, from_prev, sw)); }
@@ -134,5 +140,6 @@ static inline void dl_poly_begin(Pc *pc) { DL_HOOK(dl_poly_begin_(pc)); }
 static inline void dl_span_fill(Pc *pc) { DL_HOOK(dl_span_fill_(pc)); }
 static inline void dl_poly_end(Pc *pc) { DL_HOOK(dl_poly_end_(pc)); }
 static inline void dl_commit_view(Pc *pc) { DL_HOOK(dl_commit_view_(pc)); }
+static inline void dl_text_row(Pc *pc, uint16_t es, uint16_t di, uint16_t w) { DL_HOOK(dl_text_row_(pc, es, di, w)); }
 
 #endif

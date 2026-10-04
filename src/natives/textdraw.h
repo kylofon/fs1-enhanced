@@ -18,6 +18,7 @@
  * two CGA banks (B800:0000 even lines, B800:2000 odd lines). */
 
 #include "native.h"
+#include "enhanced/displaylist.h" /* ENH: display list */
 
 #define TEXT_FONT_DISP_OFF 0x1247 /* 0050:1247, disp16 of print_str_mask's first font load */
 #define TEXT_GLYPH_BYTES 10
@@ -79,6 +80,7 @@ static inline void textdraw_string(Pc *pc, TextDraw *t, int dir)
                 w = t->shift >= 16 ? 0 : (uint16_t)(w >> t->shift);
                 w = (uint16_t)(w >> 8 | w << 8);
             }
+            dl_text_row(pc, t->es, t->di, w); /* ENH: display list */
             mem_write16(pc, t->es, t->di, w);
             t->di = (uint16_t)(t->di + 2 * dir);
             t->ax = w;

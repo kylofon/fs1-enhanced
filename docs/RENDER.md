@@ -190,6 +190,21 @@ slides, `turn_needle`), the artificial horizon (`attitude`: rows 76h..98h, row r
 dots), radio digits and text (S2.2). `--dump-panel FILE` writes one line per needle per frame (fitted
 ends, width, colour) for checks.
 
+## 6c. Text, S2.2 as built
+
+One hook: `textdraw_string` (`textdraw.h`) calls `dl_text_row(es, di, w)` for every glyph row it writes; only B800 is
+kept (`text_w[off]`, `text_ok[off]` in `displaylist.c`). Each frame `text_collect` (`sharp.c`) keeps a row only if the
+video RAM still holds exactly its two bytes, zeroes those bytes in the CGA copy and puts their nibbles into a 160x200
+grid of fat pixels. `text_draw` (after the view and its fallback tiles) draws every non-zero cell as a rectangle of
+4 x 2.4 output pixels with the convex corners cut (30%), and a small rhombus where two cells touch only diagonally;
+colour = uniform-field composite decode of the nibble. The font itself is 4 x 5 fat pixels per glyph, so this is a
+smoothing of the game's own glyph shapes, not a different font. Screens without a panel (menus, editor) take the same
+path.
+
+Text that reaches the screen another way (drawn into a buffer and blitted, e.g. flight status and radio text) is
+not seen by the hook, so `text_detect` also looks for the game's glyphs in the video RAM (five stacked rows equal to a
+glyph's, masks FFFF/8888, below the 3D view only in flight) and treats a match like a recorded row.
+
 ## 7. Later subtasks
 
 - **S3.2 (smooth frame rate)** needs to re-project between simulation frames; it will add the eye-space

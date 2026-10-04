@@ -455,6 +455,208 @@ static bool needle_fit(const Sprite *s, int hub_o, Needle *n)
     return true;
 }
 
+/* ---- text (S2.2) --------------------------------------------------------------------------- */
+
+/* The game's font is 4 x 5 cells of one fat pixel (a nibble, 4 x 1 hi-res pixels) per glyph, stored as 16 x 5
+ * bits. The print_str family reports each glyph row it writes (dl_text_row); a row counts as text only while
+ * the video RAM still holds exactly those bytes, so anything drawn over it, cleared or restored shows as
+ * before. Valid rows go into a grid of fat-pixel cells and are zeroed in the video RAM copy (the original
+ * writes the whole word, so the background under a glyph is black); sharp_view draws every cell as a
+ * rectangle whose convex corners are cut, and bridges cells that touch only diagonally, so the glyphs
+ * become smooth shapes at any window size. */
+
+#define TCELL_W 160
+#define TCELL_H 200
+static uint8_t tcell[TCELL_W * TCELL_H]; /* fat pixels whose nibble has one bit (dim text): the nibble, 0 = none */
+static uint8_t tbit[4 * TCELL_W * TCELL_H]; /* hi-res pixels of the other nibbles (the glyph strokes): 15 = lit */
+static int n_tcell;
+
+/* The font's glyph rows (masks FFFF and 8888, the two the game uses) for the detection below; 0 = not found. */
+#define N_GLYPH 0x60
+static uint16_t glyph_rows[2 * N_GLYPH][5];
+static int n_glyph;
+
+static bool font_load(const Pc *pc)
+{
+    uint32_t base = (uint32_t)m16(pc, (0x50u << 4) + 0x1247);
+    static const uint16_t segs[2] = { 0x618, 0x686 };
+    for (int k = 0; k < 2; k++) {
+        const uint8_t *f = pc->mem + ((uint32_t)segs[k] << 4) + base;
+        bool ok = true;
+        for (int r = 0; r < 5; r++)
+            ok = ok && f[r * 2] == 0 && f[r * 2 + 1] == 0; /* the space is empty */
+        for (int ch = 'A'; ch <= 'Z' && ok; ch++) {
+            int nz = 0;
+            for (int r = 0; r < 10; r++)
+                nz += f[(ch - 0x20) * 10 + r] != 0;
+            ok = nz >= 4;
+        }
+        if (!ok)
+            continue;
+        n_glyph = 0;
+        for (int ch = 0x21; ch < 0x80; ch++) {
+            for (int m = 0; m < 2; m++) {
+                int cells = 0;
+                uint16_t *g = glyph_rows[n_glyph];
+                for (int r = 0; r < 5; r++) {
+                    g[r] = (uint16_t)((f[(ch - 0x20) * 10 + r * 2] | f[(ch - 0x20) * 10 + r * 2 + 1] << 8) & (m ? 0x8888 : 0xFFFF));
+                    for (int b = 0; b < 4; b++)
+                        cells += (g[r] >> (b * 4) & 15) != 0;
+                }
+                if (cells >= 3)
+                    n_glyph++;
+            }
+        }
+        return true;
+    }
+    n_glyph = 0;
+    return false;
+}
+
+/* Text that reached the screen by any other route (drawn into a buffer first and blitted, or by code the
+ * hook does not see) is found by looking for the game's glyphs in the video RAM: five stacked rows equal to a
+ * glyph's. Rows from first_line down only (the 3D view above could hold a lookalike). */
+static int text_detect(const uint8_t *real, int first_line, uint16_t *used, int n_used)
+{
+    for (int line = first_line; line + 4 < TCELL_H; line++) {
+        for (int b = 0; b < 79; b++) {
+            int o[5];
+            uint16_t row[5];
+            for (int r = 0; r < 5; r++) {
+                int l = line + r;
+                o[r] = (l & 1) * 0x2000 + (l >> 1) * 80 + b;
+                row[r] = (uint16_t)(real[o[r]] | real[o[r] + 1] << 8);
+            }
+            if (!row[0] && !row[1] && !row[2])
+                continue;
+            for (int g = 0; g < n_glyph; g++) {
+                const uint16_t *gr = glyph_rows[g];
+                if (gr[0] == row[0] && gr[1] == row[1] && gr[2] == row[2] && gr[3] == row[3] && gr[4] == row[4]) {
+                    for (int r = 0; r < 5 && n_used < 2 * VRAM_SIZE; r++)
+                        used[n_used++] = (uint16_t)o[r];
+                    break;
+                }
+            }
+        }
+    }
+    return n_used;
+}
+
+static void text_collect(const Pc *pc, uint8_t *vram, int detect_from)
+{
+    uint16_t *w;
+    uint8_t *ok;
+    if (!dl_text_rows(&w, &ok))
+        return;
+    const uint8_t *real = pc->mem + 0xB8000;
+    static uint16_t used[2 * VRAM_SIZE];
+    int n_used = 0;
+    for (int o = 0; o < VRAM_SIZE - 1; o++) {
+        if (!ok[o])
+            continue;
+        if (real[o] != (w[o] & 255) || real[o + 1] != (w[o] >> 8)) {
+            ok[o] = 0; /* overwritten since: not text any more */
+            continue;
+        }
+        if (w[o])
+            used[n_used++] = (uint16_t)o;
+    }
+    if (font_load(pc))
+        n_used = text_detect(real, detect_from, used, n_used);
+    if (!n_used)
+        return;
+    memset(tcell, 0, sizeof tcell);
+    memset(tbit, 0, sizeof tbit);
+    for (int k = 0; k < n_used; k++) {
+        for (int i = 0; i < 2; i++) {
+            int a = used[k] + i, within = a & 0x1FFF, line = within / 80 * 2 + (a >> 13), col = within % 80;
+            if (within >= 8000 || line >= TCELL_H)
+                continue;
+            for (int k = 0; k < 2; k++) {
+                int nib = k ? real[a] & 15 : real[a] >> 4, bits = __builtin_popcount(nib);
+                if (bits == 1)
+                    tcell[line * TCELL_W + col * 2 + k] = (uint8_t)nib;
+                else
+                    for (int j = 0; j < 4; j++)
+                        if (nib >> (3 - j) & 1)
+                            tbit[line * 4 * TCELL_W + col * 8 + k * 4 + j] = 15;
+            }
+            vram[a] = 0;
+            n_tcell++;
+        }
+    }
+}
+
+static const uint8_t *g_cells;
+static int g_w;
+static int cell_on(int x, int y) { return x >= 0 && y >= 0 && x < g_w && y < TCELL_H && g_cells[y * g_w + x]; }
+
+static void fan(const SDL_FPoint *p, int n, SDL_FColor c)
+{
+    reserve(n, 3 * (n - 2));
+    int i = n_verts;
+    for (int k = 0; k < n; k++)
+        push(p[k], c);
+    for (int k = 1; k < n - 1; k++)
+        idx[n_idx++] = i, idx[n_idx++] = i + k, idx[n_idx++] = i + k + 1;
+}
+
+/* One grid of cells (gw wide, cw output pixels each) as smoothed shapes: every cell a rectangle with its convex
+ * corners cut, a small rhombus where two cells touch only diagonally. */
+static void draw_grid(const uint8_t *g, int gw, float cw, const SDL_FColor *ncol)
+{
+    g_cells = g, g_w = gw;
+    const float ch = SY, kx = (cw < 2 ? 0.5f : 0.3f) * cw, ky = 0.35f * ch;
+    for (int y = 0; y < TCELL_H; y++) {
+        for (int x = 0; x < gw; x++) {
+            int v = g[y * gw + x];
+            if (!v)
+                continue;
+            int n = cell_on(x, y - 1), s = cell_on(x, y + 1), e = cell_on(x + 1, y), wst = cell_on(x - 1, y);
+            float x0 = (float)x * cw, x1 = x0 + cw, y0 = (float)y * ch, y1 = y0 + ch;
+            SDL_FPoint p[8];
+            int np = 0;
+            if (!n && !wst) p[np++] = (SDL_FPoint){ x0, y0 + ky }, p[np++] = (SDL_FPoint){ x0 + kx, y0 };
+            else p[np++] = (SDL_FPoint){ x0, y0 };
+            if (!n && !e) p[np++] = (SDL_FPoint){ x1 - kx, y0 }, p[np++] = (SDL_FPoint){ x1, y0 + ky };
+            else p[np++] = (SDL_FPoint){ x1, y0 };
+            if (!s && !e) p[np++] = (SDL_FPoint){ x1, y1 - ky }, p[np++] = (SDL_FPoint){ x1 - kx, y1 };
+            else p[np++] = (SDL_FPoint){ x1, y1 };
+            if (!s && !wst) p[np++] = (SDL_FPoint){ x0 + kx, y1 }, p[np++] = (SDL_FPoint){ x0, y1 - ky };
+            else p[np++] = (SDL_FPoint){ x0, y1 };
+            fan(p, np, ncol[v]);
+            if (y + 1 < TCELL_H) { /* a cell that touches this one only at a corner: bridge the gap */
+                if (cell_on(x + 1, y + 1) && !e && !s) {
+                    SDL_FPoint q[4] = { { x1 - kx, y1 }, { x1, y1 - ky }, { x1 + kx, y1 }, { x1, y1 + ky } };
+                    fan(q, 4, ncol[v]);
+                }
+                if (cell_on(x - 1, y + 1) && !wst && !s) {
+                    SDL_FPoint q[4] = { { x0 - kx, y1 }, { x0, y1 - ky }, { x0 + kx, y1 }, { x0, y1 + ky } };
+                    fan(q, 4, ncol[v]);
+                }
+            }
+        }
+    }
+}
+
+static void text_draw(SDL_Renderer *r)
+{
+    if (!n_tcell)
+        return;
+    static SDL_FColor ncol[16];
+    static bool ncol_ready;
+    if (!ncol_ready) {
+        for (int n = 1; n < 16; n++) /* no composite colour fringes: white, or grey for dim text (one bit per nibble) */
+            ncol[n] = n == 15 ? (SDL_FColor){ 1, 1, 1, 1 } : (SDL_FColor){ 0.65f, 0.65f, 0.65f, 1 };
+        ncol_ready = true;
+    }
+    n_verts = n_idx = n_hair = 0;
+    draw_grid(tcell, TCELL_W, 4.0f, ncol);
+    draw_grid(tbit, 4 * TCELL_W, 1.0f, ncol); /* strokes: lit hi-res pixels in the colour of a full nibble */
+    flush_clip(r, NULL);
+}
+
+
 void sharp_render_cga(const Pc *pc, uint32_t *px)
 {
     static uint8_t vram[VRAM_SIZE];
@@ -463,12 +665,17 @@ void sharp_render_cga(const Pc *pc, uint32_t *px)
     n_needles = 0;
     panel_frame++;
     uint32_t cseg = m16(pc, 0x122);
-    if (!pc->composite || (pc->cga_mode & 0x1E) != 0x1A || cseg == 0 || cseg == 0xB800 ||
-        (cseg << 4) + VRAM_SIZE > 0xA0000) {
+    n_tcell = 0;
+    if (!pc->composite || (pc->cga_mode & 0x1E) != 0x1A) {
         pc_render_cga(pc, px);
         return;
     }
     memcpy(vram, pc->mem + 0xB8000, VRAM_SIZE);
+    if (cseg == 0 || cseg == 0xB800 || (cseg << 4) + VRAM_SIZE > 0xA0000) { /* no panel: text only */
+        text_collect(pc, vram, 0);
+        pc_render_cga_vram(pc, vram, px);
+        return;
+    }
     const uint8_t *clean = pc->mem + (cseg << 4);
     static uint16_t done[8 * MAX_TOUCH];
     int n_done = 0;
@@ -497,6 +704,7 @@ void sharp_render_cga(const Pc *pc, uint32_t *px)
         if (all[o])
             vram[o] = (uint8_t)((vram[o] & ~all[o]) | (clean[o] & all[o])), all[o] = 0;
     }
+    text_collect(pc, vram, 106);
     pc_render_cga_vram(pc, vram, px);
 }
 
@@ -521,9 +729,8 @@ static void panel_draw(SDL_Renderer *r)
     flush_clip(r, NULL);
 }
 
-bool sharp_view(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga)
+static bool view_draw(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga)
 {
-    panel_draw(renderer);
     const DlFrame *f = dl_view();
     if (!f || f->incomplete || !pc->composite || (pc->cga_mode & 0x1E) != 0x1A)
         return false;
@@ -565,4 +772,12 @@ bool sharp_view(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga)
     SDL_SetRenderClipRect(renderer, NULL);
     fallback_tiles(renderer, pc, cga, dl_view_snap(), view_y0);
     return true;
+}
+
+bool sharp_view(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga)
+{
+    panel_draw(renderer);
+    bool shown = view_draw(renderer, pc, cga);
+    text_draw(renderer);
+    return shown;
 }

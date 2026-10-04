@@ -75,6 +75,7 @@ window size. The CGA path stays as the authentic mode (`--classic`, or toggled i
 | S2.1 | Instrument panel at high resolution: needles as lines/polygons, indicators and sprites upscaled or vector-traced from the original sprite data; **U1 check** | S | L | done 2026-10-04, U1 pending |
 | S2.2 | Text at high resolution: the 16×5 game font rendered as scalable glyphs (vector from the font bits), panel and menu text; editor text mode with a sharp font | S | M | done 2026-10-04, U1 pending |
 | S2.3 | Artificial horizon at high resolution (`gauges.c` `attitude`: row records DS:1BAB, spans 293F, bank dots 5B88/2A3E): sub-pixel horizon line between the sky and ground colours, bank pointer; read the state like S2.1 (section 6b), verify against the video RAM; **U1 check** | S | M | |
+| S2.4 | Panel labels (COMPASS, FUEL, OIL, COM, NAV, TRANSPONDER, TIME, KNOTS, gauge numerals, GEAR/LIGHTS/MAGS/CARB) at high resolution, like S2.2: they are part of the panel bitmap (not the game font), so find them in the clean panel image (segment at 0000:0122) or from the panel art data, identify each character (own small glyph set of the panel font, or trace), redraw crisp in white/their colour with the 8x8-style font, remove the pixel/fringe version from the CGA copy; text only, gauge faces and scales stay | S | M | |
 
 ### Phase 3 — View
 | Id | Task | Model | Size | Status |

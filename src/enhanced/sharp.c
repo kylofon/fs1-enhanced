@@ -474,6 +474,7 @@ static int n_tcell;
 /* The font's glyph rows (masks FFFF and 8888, the two the game uses) for the detection below; 0 = not found. */
 #define N_GLYPH 0x60
 static uint16_t glyph_rows[2 * N_GLYPH][5];
+static uint8_t glyph_ch[2 * N_GLYPH], glyph_dim[2 * N_GLYPH]; /* the character and whether it is the dim (8888) form */
 static int n_glyph;
 
 static bool font_load(const Pc *pc)
@@ -503,8 +504,10 @@ static bool font_load(const Pc *pc)
                     for (int b = 0; b < 4; b++)
                         cells += (g[r] >> (b * 4) & 15) != 0;
                 }
-                if (cells >= 3)
+                if (cells >= 3) {
+                    glyph_ch[n_glyph] = (uint8_t)ch, glyph_dim[n_glyph] = (uint8_t)m;
                     n_glyph++;
+                }
             }
         }
         return true;
@@ -513,10 +516,22 @@ static bool font_load(const Pc *pc)
     return false;
 }
 
-/* Text that reached the screen by any other route (drawn into a buffer first and blitted, or by code the
- * hook does not see) is found by looking for the game's glyphs in the video RAM: five stacked rows equal to a
- * glyph's. Rows from first_line down only (the 3D view above could hold a lookalike). */
-static int text_detect(const uint8_t *real, int first_line, uint16_t *used, int n_used)
+/* Glyphs of the game's font found in the video RAM, drawn by the back end with the 8x8 text font (pc->font)
+ * instead of the game's thin 16x5 shapes. */
+#define MAX_HIT 2048
+typedef struct TextHit {
+    int x, line; /* hi-res pixel column and scan line of the glyph's top left */
+    uint8_t dim;
+    uint8_t bm[8];
+} TextHit;
+static TextHit hits[MAX_HIT];
+static int n_hit;
+static uint8_t claimed[VRAM_SIZE]; /* video RAM bytes that belong to a found glyph */
+
+/* Text is found by looking for the game's glyphs in the video RAM: five stacked rows equal to a glyph's
+ * (whatever drew them: the print_str family, a buffer blitted later, ...). Rows from first_line down only
+ * (the 3D view above could hold a lookalike). */
+static void text_detect(const Pc *pc, const uint8_t *real, int first_line)
 {
     for (int line = first_line; line + 4 < TCELL_H; line++) {
         for (int b = 0; b < 79; b++) {
@@ -532,25 +547,34 @@ static int text_detect(const uint8_t *real, int first_line, uint16_t *used, int 
             for (int g = 0; g < n_glyph; g++) {
                 const uint16_t *gr = glyph_rows[g];
                 if (gr[0] == row[0] && gr[1] == row[1] && gr[2] == row[2] && gr[3] == row[3] && gr[4] == row[4]) {
-                    for (int r = 0; r < 5 && n_used < 2 * VRAM_SIZE; r++)
-                        used[n_used++] = (uint16_t)o[r];
+                    if (n_hit < MAX_HIT) {
+                        TextHit *h = &hits[n_hit++];
+                        h->x = b * 8, h->line = line, h->dim = glyph_dim[g];
+                        memcpy(h->bm, pc->font[glyph_ch[g]], 8);
+                    }
+                    for (int r = 0; r < 5; r++)
+                        claimed[o[r]] = claimed[o[r] + 1] = 1;
+                    b++; /* the next cell starts two bytes on */
                     break;
                 }
             }
         }
     }
-    return n_used;
 }
 
 static void text_collect(const Pc *pc, uint8_t *vram, int detect_from)
 {
     uint16_t *w;
     uint8_t *ok;
+    n_hit = 0;
     if (!dl_text_rows(&w, &ok))
         return;
     const uint8_t *real = pc->mem + 0xB8000;
-    static uint16_t used[2 * VRAM_SIZE];
+    static uint16_t used[VRAM_SIZE];
     int n_used = 0;
+    memset(claimed, 0, sizeof claimed);
+    if (font_load(pc))
+        text_detect(pc, real, detect_from);
     for (int o = 0; o < VRAM_SIZE - 1; o++) {
         if (!ok[o])
             continue;
@@ -558,11 +582,12 @@ static void text_collect(const Pc *pc, uint8_t *vram, int detect_from)
             ok[o] = 0; /* overwritten since: not text any more */
             continue;
         }
-        if (w[o])
+        if (w[o] && !(claimed[o] && claimed[o + 1]))
             used[n_used++] = (uint16_t)o;
     }
-    if (font_load(pc))
-        n_used = text_detect(real, detect_from, used, n_used);
+    for (int a = 0; a < VRAM_SIZE; a++)
+        if (claimed[a])
+            vram[a] = 0;
     if (!n_used)
         return;
     memset(tcell, 0, sizeof tcell);
@@ -570,7 +595,7 @@ static void text_collect(const Pc *pc, uint8_t *vram, int detect_from)
     for (int k = 0; k < n_used; k++) {
         for (int i = 0; i < 2; i++) {
             int a = used[k] + i, within = a & 0x1FFF, line = within / 80 * 2 + (a >> 13), col = within % 80;
-            if (within >= 8000 || line >= TCELL_H)
+            if (within >= 8000 || line >= TCELL_H || claimed[a])
                 continue;
             for (int k = 0; k < 2; k++) {
                 int nib = k ? real[a] & 15 : real[a] >> 4, bits = __builtin_popcount(nib);
@@ -641,7 +666,7 @@ static void draw_grid(const uint8_t *g, int gw, float cw, const SDL_FColor *ncol
 
 static void text_draw(SDL_Renderer *r)
 {
-    if (!n_tcell)
+    if (!n_tcell && !n_hit)
         return;
     static SDL_FColor ncol[16];
     static bool ncol_ready;
@@ -653,6 +678,24 @@ static void text_draw(SDL_Renderer *r)
     n_verts = n_idx = n_hair = 0;
     draw_grid(tcell, TCELL_W, 4.0f, ncol);
     draw_grid(tbit, 4 * TCELL_W, 1.0f, ncol); /* strokes: lit hi-res pixels in the colour of a full nibble */
+    for (int i = 0; i < n_hit; i++) { /* the 8x8 font: each run of lit pixels one rectangle, 2 x 1.7 output pixels per pixel */
+        const TextHit *h = &hits[i];
+        SDL_FColor col = ncol[h->dim ? 8 : 15];
+        float x0 = (float)h->x, y0 = (float)h->line * SY - 0.8f;
+        for (int row = 0; row < 8; row++) {
+            for (int cx = 0; cx < 8; cx++) {
+                if (!(h->bm[row] >> (7 - cx) & 1))
+                    continue;
+                int end = cx;
+                while (end + 1 < 8 && (h->bm[row] >> (6 - end) & 1))
+                    end++;
+                float ax = x0 + (float)cx * 2.0f, bx = x0 + (float)(end + 1) * 2.0f + 0.8f;
+                float ay = y0 + (float)row * 1.7f, by = ay + 1.85f;
+                quad_out((SDL_FPoint){ ax, ay }, (SDL_FPoint){ bx, ay }, (SDL_FPoint){ bx, by }, (SDL_FPoint){ ax, by }, col);
+                cx = end;
+            }
+        }
+    }
     flush_clip(r, NULL);
 }
 
@@ -665,7 +708,7 @@ void sharp_render_cga(const Pc *pc, uint32_t *px)
     n_needles = 0;
     panel_frame++;
     uint32_t cseg = m16(pc, 0x122);
-    n_tcell = 0;
+    n_tcell = n_hit = 0;
     if (!pc->composite || (pc->cga_mode & 0x1E) != 0x1A) {
         pc_render_cga(pc, px);
         return;
@@ -704,7 +747,8 @@ void sharp_render_cga(const Pc *pc, uint32_t *px)
         if (all[o])
             vram[o] = (uint8_t)((vram[o] & ~all[o]) | (clean[o] & all[o])), all[o] = 0;
     }
-    text_collect(pc, vram, 106);
+    const DlFrame *vf = dl_view(); /* in flight the 3D view occupies the top: no glyph look-alikes there */
+    text_collect(pc, vram, vf && !vf->incomplete ? 106 : 0);
     pc_render_cga_vram(pc, vram, px);
 }
 

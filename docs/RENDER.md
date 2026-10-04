@@ -205,6 +205,10 @@ Text that reaches the screen another way (drawn into a buffer and blitted, e.g. 
 not seen by the hook, so `text_detect` also looks for the game's glyphs in the video RAM (five stacked rows equal to a
 glyph's, masks FFFF/8888, below the 3D view only in flight) and treats a match like a recorded row.
 
+Glyphs found this way are drawn with the 8x8 text-mode font (`pc->font`, the look of the ESC screen) instead of the
+game's thin 16x5 shapes: white (grey when dim), one rectangle per run of lit pixels, 2 x 1.7 output pixels per font
+pixel. Rows the detection did not claim (shifted text, panel art) keep the smoothed-cell drawing above.
+
 ## 7. Later subtasks
 
 - **S3.2 (smooth frame rate)** needs to re-project between simulation frames; it will add the eye-space

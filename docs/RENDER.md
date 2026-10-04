@@ -158,11 +158,43 @@ Per display frame:
 3. Draw the screen layer items (S2), then the fallback tiles from the CGA texture.
 4. F11 cycles composite → RGB → sharp (D2: sharp is the default; `--classic` forces authentic).
 
+## 6b. Panel needles, S2.1 as built
+
+The panel did not need the retained screen layer of section 5 (owner/expect shadows, hooks in
+`indicator.c`): the needle drawer keeps everything needed in the game's own data, so the back end
+**reads state instead of recording** and the engine gets no `ENH:` hook for it (only `pc_render_cga`
+takes the video RAM image as a parameter, and `main.c` calls `sharp_render_cga` while sharp is on).
+
+Each frame (`sharp_render_cga`, `src/enhanced/sharp.c`), for the five needle descriptors 092F airspeed,
+0939 / 0943 altimeter large / small hand, 094D VSI, 0957 tachometer (docs/subphases/3.10.md of the
+faithful port):
+
+1. Read code (+4), screen offset (+5), size word (+7); take the sprite from the table (0961 for
+   `draw_needle`, 098F for `draw_needle2`, the other one if the size word disagrees) and rebuild the bits
+   the needle drawer ORed (rows go up or down from the hub by the code's quadrant bits, left-half sprites
+   mirrored through the table at DS:12B4, same row-step arithmetic as `needle_draw_normal/mirrored`).
+2. **Validity.** The needle counts only if every one of those bits is set in B800. A stale descriptor, a
+   half-drawn or erased needle, a menu or editor screen all fail this and stay as the CGA picture.
+3. The bits are cleared in a copy of the video RAM and replaced by the clean panel's (segment at
+   0000:0122 is a copy of the panel with the same offsets as B800); the CGA texture is decoded from that
+   copy, so it shows the panel without the needles.
+4. Each needle is a line fitted to its sprite pixels in output space (640x480, hi-res pixel = 1 x 2.4):
+   principal axis through the pixel centroid, ends at the extreme pixels, `a` the end nearer the hub byte;
+   thickness = pixel area / length (`--needle-width F` scales it); colour = the composite colour of the
+   sprite's most frequent nibble (white). `sharp_view` draws it as a quad that narrows towards the tip
+   over the unclipped panel.
+
+Not vectorised (they stay crisp CGA pixels): the control-position indicators (`draw_indicator`: aileron,
+rudder, elevator, throttle, flaps, trim), the altimeter band marker, the turn indicator (a sprite that
+slides, `turn_needle`), the artificial horizon (`attitude`: rows 76h..98h, row records at DS:1BAB, bank
+dots), radio digits and text (S2.2). `--dump-panel FILE` writes one line per needle per frame (fitted
+ends, width, colour) for checks.
+
 ## 7. Later subtasks
 
 - **S3.2 (smooth frame rate)** needs to re-project between simulation frames; it will add the eye-space
   (pre-projection) endpoints to `DL_LINE`/`DL_DOT`/`DL_POLY` vertices and the eye pose to the frame.
   The staging hooks already see those words, so only the format grows.
-- **S2.1 / S2.2** fill in the hooks for `indicator.c`, `gauges.c` (needles, XOR pixel/dot routines
-  5B88/2A3E, span fill 293F, column 2474), `war.c` (scope 334A/3308, status line) and `text.c`, using
-  the retained screen layer above.
+- **S2.2** fills in the hooks for `war.c` (scope 334A/3308, status line) and `text.c`, using the retained
+  screen layer of section 5 (S2.1 did the needles without it, section 6b); the artificial horizon
+  (`gauges.c`: `attitude`, span fill 293F, XOR bank dots 5B88/2A3E) is still to do.

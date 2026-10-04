@@ -18,12 +18,13 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 | Task | What to do | For | Time |
 |---|---|---|---|
-| U1 | S1.3 sharp 3D view: close the running game, `cmake --build build`, run `builds1-enhanced.exe` (sharp is the default) next to `--classic`, fly (A, B at the menus) and compare the 3D view; or open `work\sharp_650.bmp` vs `work\classic_650.bmp`. Reply `OK` or what is wrong and where (colours, line thickness `--line-width N`, runway/ground fills, blurry patches) | S1.3 | 5 min |
+| U1 | S2.1 sharp panel needles: close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` next to `--classic`, take off (A, B at the menus, F2 for throttle) and watch the airspeed, altimeter (both hands), VSI and tachometer needles; or open `work\sharp_p.bmp` vs `work\classic_p.bmp` (frame 900 on the runway). Reply `OK` or what is wrong (needle position/length, thickness: `--needle-width F`, colour, flicker, leftover pixel needles) | S2.1 | 5 min |
+| U1 | S1.3 sharp 3D view: close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` (sharp is the default) next to `--classic`, fly (A, B at the menus) and compare the 3D view; or open `work\sharp_650.bmp` vs `work\classic_650.bmp`. Reply `OK` or what is wrong and where (colours, line thickness `--line-width N`, runway/ground fills, blurry patches) | S1.3 | 5 min |
 
 ## Status
 
-- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending).
-- **Next:** U1 check of S1.3, then S2.1. No user tasks pending. Decisions D1–D4 below are binding.
+- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending).
+- **Next:** U1 checks of S1.3 and S2.1, then S2.2 (text) and S2.3 (artificial horizon). Decisions D1–D4 below are binding.
 - Escalation rule: a subtask that fails twice on Sonnet → new Opus session with a 5-line note
   (symptom, file, what was tried). Never carry an old transcript over.
 
@@ -70,8 +71,9 @@ window size. The CGA path stays as the authentic mode (`--classic`, or toggled i
 ### Phase 2 — Panel and text
 | Id | Task | Model | Size | Status |
 |---|---|---|---|---|
-| S2.1 | Instrument panel at high resolution: needles as lines/polygons, indicators and sprites upscaled or vector-traced from the original sprite data; **U1 check** | S | L | |
+| S2.1 | Instrument panel at high resolution: needles as lines/polygons, indicators and sprites upscaled or vector-traced from the original sprite data; **U1 check** | S | L | done 2026-10-04, U1 pending |
 | S2.2 | Text at high resolution: the 16×5 game font rendered as scalable glyphs (vector from the font bits), panel and menu text; editor text mode with a sharp font | S | M | |
+| S2.3 | Artificial horizon at high resolution (`gauges.c` `attitude`: row records DS:1BAB, spans 293F, bank dots 5B88/2A3E): sub-pixel horizon line between the sky and ground colours, bank pointer; read the state like S2.1 (section 6b), verify against the video RAM; **U1 check** | S | M | |
 
 ### Phase 3 — View
 | Id | Task | Model | Size | Status |
@@ -127,6 +129,11 @@ Notes:
   `--classic`, `--verify`, `--native-off` start with sharp off (recording off). Screenshots (`--screenshot`)
   in sharp mode are the window picture. Verified: `verify_campaign.py` OK, flight run cycles identical to
   `--classic` (56353233), `--dl-check` clean. Exe locked while the game runs: build to another dir.
+- S2.1: needles only, by reading state (`docs/RENDER.md` 6b); no engine hook besides `pc_render_cga_vram` (pc.c)
+  and `sharp_render_cga` (main.c). Five needles found in ~all flight frames of a 4500-frame take-off run;
+  `--classic` screenshot and cycle count unchanged. Fitted lines checked numerically against the sprite pixels
+  (`--dump-panel`), not by eye. Indicators / altimeter band / turn indicator stay crisp pixels (they are small
+  sliding sprites; vector tracing gains nothing). The artificial horizon is split off as S2.3.
 
 ## User tasks
 ### U1 — Visual checks (when an agent asks)

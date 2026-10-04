@@ -24,6 +24,14 @@ bool enh_parse_arg(int argc, char *argv[], int *i)
         dl_set_check();
         return true;
     }
+    if (SDL_strcmp(argv[*i], "--dump-panel") == 0 && *i + 1 < argc) {
+        sharp_set_dump_panel(argv[++*i]);
+        return true;
+    }
+    if (SDL_strcmp(argv[*i], "--needle-width") == 0 && *i + 1 < argc) {
+        sharp_set_needle_scale((float)SDL_atof(argv[++*i]));
+        return true;
+    }
     if (SDL_strcmp(argv[*i], "--line-width") == 0 && *i + 1 < argc) {
         sharp_set_line_width((float)SDL_atof(argv[++*i]));
         return true;

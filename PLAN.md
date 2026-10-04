@@ -18,13 +18,14 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 | Task | What to do | For | Time |
 |---|---|---|---|
+| U1 | S2.2 sharp text: close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` next to `--classic` and look at the start-up menus, the flight status/radio text and the editor screens: the letters should be smooth at any window size, same colour and place as classic. Reply `OK` or what is wrong (blurry/missing letters, leftover pixel letters, wrong colour, text that does not vanish when the game erases it) | S2.2 | 5 min |
 | U1 | S2.1 sharp panel needles: close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` next to `--classic`, take off (A, B at the menus, F2 for throttle) and watch the airspeed, altimeter (both hands), VSI and tachometer needles; or open `work\sharp_p.bmp` vs `work\classic_p.bmp` (frame 900 on the runway). Reply `OK` or what is wrong (needle position/length, thickness: `--needle-width F`, colour, flicker, leftover pixel needles) | S2.1 | 5 min |
 | U1 | S1.3 sharp 3D view: close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` (sharp is the default) next to `--classic`, fly (A, B at the menus) and compare the 3D view; or open `work\sharp_650.bmp` vs `work\classic_650.bmp`. Reply `OK` or what is wrong and where (colours, line thickness `--line-width N`, runway/ground fills, blurry patches) | S1.3 | 5 min |
 
 ## Status
 
-- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending).
-- **Next:** U1 checks of S1.3 and S2.1, then S2.2 (text) and S2.3 (artificial horizon). Decisions D1–D4 below are binding.
+- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending).
+- **Next:** U1 checks of S1.3, S2.1 and S2.2, then S2.3 (artificial horizon). Decisions D1–D4 below are binding.
 - Escalation rule: a subtask that fails twice on Sonnet → new Opus session with a 5-line note
   (symptom, file, what was tried). Never carry an old transcript over.
 
@@ -72,7 +73,7 @@ window size. The CGA path stays as the authentic mode (`--classic`, or toggled i
 | Id | Task | Model | Size | Status |
 |---|---|---|---|---|
 | S2.1 | Instrument panel at high resolution: needles as lines/polygons, indicators and sprites upscaled or vector-traced from the original sprite data; **U1 check** | S | L | done 2026-10-04, U1 pending |
-| S2.2 | Text at high resolution: the 16×5 game font rendered as scalable glyphs (vector from the font bits), panel and menu text; editor text mode with a sharp font | S | M | |
+| S2.2 | Text at high resolution: the 16×5 game font rendered as scalable glyphs (vector from the font bits), panel and menu text; editor text mode with a sharp font | S | M | done 2026-10-04, U1 pending |
 | S2.3 | Artificial horizon at high resolution (`gauges.c` `attitude`: row records DS:1BAB, spans 293F, bank dots 5B88/2A3E): sub-pixel horizon line between the sky and ground colours, bank pointer; read the state like S2.1 (section 6b), verify against the video RAM; **U1 check** | S | M | |
 
 ### Phase 3 — View
@@ -134,6 +135,15 @@ Notes:
   `--classic` screenshot and cycle count unchanged. Fitted lines checked numerically against the sprite pixels
   (`--dump-panel`), not by eye. Indicators / altimeter band / turn indicator stay crisp pixels (they are small
   sliding sprites; vector tracing gains nothing). The artificial horizon is split off as S2.3.
+- S2.2: text by one hook (`textdraw.h`: `dl_text_row`, ENH) that records each glyph row word the print_str family writes to
+  B800 (`displaylist.c`, retained per video RAM offset). `sharp_render_cga` keeps a row only while video RAM still holds
+  exactly those bytes (anything overwritten, cleared or restored drops out), zeroes the rows in the CGA copy (the original
+  writes whole words, so the background under a glyph is black) and fills a grid of fat-pixel cells (nibbles); `sharp_view`
+  draws each cell as a rectangle with its convex corners cut and bridges diagonal-only neighbours (colour = composite
+  decode of the nibble), after the view and the fallback tiles. Works on every screen in 640x200 composite mode (start-up
+  menus, panel text, editor), not only in flight. Verified: `verify_campaign.py` OK, 1500-frame run cycles identical to
+  `--classic` (119317525), ~900 text rows seen on the start-up screen. Shifted text (print_str2) is cell-quantised to
+  whole nibbles. Not checked by eye (U1).
 
 ## User tasks
 ### U1 — Visual checks (when an agent asks)

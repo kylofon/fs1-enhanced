@@ -805,3 +805,23 @@ void dl_commit_view_(Pc *pc)
     st.valid = prev_end.valid = dot_st.valid = false;
     poly_slot = sky_mark = -1;
 }
+
+/* ---- text rows (S2.2) ------------------------------------------------------------------------ */
+
+static uint16_t text_w[0x4000];
+static uint8_t text_ok[0x4000];
+
+void dl_text_row_(Pc *pc, uint16_t es, uint16_t di, uint16_t w)
+{
+    (void)pc;
+    if (es != 0xB800 || di >= 0x4000 - 1)
+        return;
+    text_w[di] = w;
+    text_ok[di] = 1;
+}
+
+bool dl_text_rows(uint16_t **w, uint8_t **ok)
+{
+    *w = text_w, *ok = text_ok;
+    return dl_on;
+}

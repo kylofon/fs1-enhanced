@@ -3,7 +3,9 @@
 #include "enhanced/displaylist.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define VIEW_W 160
 #define VIEW_H 106
@@ -258,10 +260,9 @@ static void fallback_tiles(SDL_Renderer *r, const Pc *pc, SDL_Texture *cga, cons
 }
 
 /* Draws the batched geometry (and hairlines) so far, clipped to the view. */
-static void flush(SDL_Renderer *r)
+static void flush_clip(SDL_Renderer *r, const SDL_Rect *clip)
 {
-    SDL_Rect clip = { 0, (int)((float)view_y0 * SY + 0.5f), 640, (int)(VIEW_H * SY + 0.5f) };
-    SDL_SetRenderClipRect(r, &clip);
+    SDL_SetRenderClipRect(r, clip);
     if (n_idx)
         SDL_RenderGeometry(r, NULL, verts, n_verts, idx, n_idx);
     for (int i = 0; i < n_hair; i++) {
@@ -271,8 +272,258 @@ static void flush(SDL_Renderer *r)
     n_verts = n_idx = n_hair = 0;
 }
 
+static void flush(SDL_Renderer *r)
+{
+    SDL_Rect clip = { 0, (int)((float)view_y0 * SY + 0.5f), 640, (int)(VIEW_H * SY + 0.5f) };
+    flush_clip(r, &clip);
+}
+
+/* ---- instrument panel needles (S2.1) ------------------------------------------------------- */
+
+/* The panel is drawn into B800 by the original, needle sprites ORed over the clean panel. Nothing is
+ * recorded: each frame the five needle descriptors are read from the game's own data (drawn code, screen
+ * offset and size of the sprite, +4/+5/+7; docs/subphases/3.10.md of the faithful port), the sprite bits
+ * are rebuilt exactly as the needle drawer ORed them, and a needle counts as present only if every one of
+ * those bits is set in the video RAM. The bits are then replaced by the clean panel's, so the CGA texture
+ * shows the panel without the needles, and each needle is drawn on top as a line fitted to its sprite
+ * pixels. Anything that does not check out (stale descriptor, other screen) stays as the CGA picture. */
+
+#define VRAM_SIZE 0x4000
+#define MAX_TOUCH 1700 /* bytes one sprite can touch: 8 words x 100 rows x 2 */
+
+typedef struct Needle {
+    SDL_FPoint a, b; /* output (640x480) coordinates of the two ends: a at the hub */
+    float width;     /* output pixels at the hub end */
+    SDL_FColor col;
+    uint16_t desc;
+    uint8_t code;
+} Needle;
+
+typedef struct Sprite {
+    uint8_t bits[VRAM_SIZE]; /* the sprite's bits per video RAM byte */
+    uint16_t touched[MAX_TOUCH];
+    int n;
+} Sprite;
+
+static Needle needles[8];
+static int n_needles;
+static FILE *panel_dump;
+static long panel_frame;
+static float needle_scale = 1.0f; /* --needle-width: factor on the thickness taken from the sprite */
+
+void sharp_set_dump_panel(const char *path) { panel_dump = fopen(path, "w"); }
+void sharp_set_needle_scale(float s) { needle_scale = s < 0 ? 0 : s; }
+
+static const struct { uint16_t desc, table; } needle_defs[] = {
+    { 0x92F, 0x961 }, /* airspeed */
+    { 0x939, 0x961 }, /* altimeter, large hand */
+    { 0x943, 0x98F }, /* altimeter, small hand */
+    { 0x94D, 0x98F }, /* VSI */
+    { 0x957, 0x98F }, /* tachometer */
+};
+
+static uint16_t m16(const Pc *pc, uint32_t lin) { return (uint16_t)(pc->mem[lin] | pc->mem[lin + 1] << 8); }
+
+static void sprite_clear(Sprite *s)
+{
+    for (int i = 0; i < s->n; i++)
+        s->bits[s->touched[i]] = 0;
+    s->n = 0;
+}
+
+/* The bits the needle drawer ORed for descriptor desc (sprite table `table`) into s; false when there is
+ * no needle or the video RAM does not contain them. *hub_o = video RAM offset of the needle's hub byte. */
+static bool needle_bits(const Pc *pc, const uint8_t *vram, uint16_t desc, uint16_t table, Sprite *s, uint8_t *code_out,
+                        int *hub_o)
+{
+    sprite_clear(s);
+    uint32_t ds = (uint32_t)m16(pc, 0x120) << 4;
+    if (ds == 0 || ds + 0x2000 > 0xA0000)
+        return false;
+    uint8_t code = pc->mem[ds + desc + 4];
+    if (code == 0xFF)
+        return false;
+    uint16_t off = m16(pc, ds + desc + 5), size = m16(pc, ds + desc + 7);
+    int dl = size & 255, dh = size >> 8;
+    if (dl < 1 || dl > 8 || dh < 1 || dh > 100)
+        return false;
+    uint32_t sprite = ds + m16(pc, ds + table + (uint32_t)(code & 0x3F) * 2);
+    if (sprite + 2 + (uint32_t)dl * dh * 2 > 0xA0000 || m16(pc, sprite) != size)
+        return false;
+    bool lower = code & 0x40, mirrored = code & 0x80;
+    const uint8_t *rev = pc->mem + ds + 0x12B4;
+    uint16_t di = off;
+    sprite += 2;
+    for (int r = 0; r < dh; r++) {
+        uint16_t bp = di;
+        for (int c = 0; c < dl; c++) {
+            uint16_t w = m16(pc, sprite);
+            sprite += 2;
+            uint16_t ax = mirrored ? (uint16_t)(rev[w & 255] << 8 | rev[w >> 8]) : w;
+            if (bp >= VRAM_SIZE - 1 || s->n + 2 > MAX_TOUCH)
+                goto fail;
+            s->bits[bp] |= (uint8_t)ax, s->bits[bp + 1] |= (uint8_t)(ax >> 8);
+            s->touched[s->n++] = bp, s->touched[s->n++] = (uint16_t)(bp + 1);
+            bp = (uint16_t)(bp + (mirrored ? -2 : 2));
+        }
+        bool odd = (int16_t)bp > 0x1F40;
+        di = (uint16_t)(di + (lower ? (odd ? 0xE050 : 0x2000) : (odd ? 0xE000 : 0x1FB0)));
+    }
+    for (int i = 0; i < s->n; i++)
+        if (s->bits[s->touched[i]] & ~vram[s->touched[i]])
+            goto fail;
+    *code_out = code;
+    *hub_o = m16(pc, ds + desc + (lower ? 2 : 0));
+    return true;
+fail:
+    sprite_clear(s);
+    return false;
+}
+
+/* Output coordinates of the centre of hi-res pixel `bit` (7 = leftmost) of video RAM byte o. */
+static bool vram_pixel_pos(int o, int bit, float *x, float *y)
+{
+    int line, col;
+    if (o < 0x2000)
+        line = o / 80 * 2, col = o % 80;
+    else
+        line = (o - 0x2000) / 80 * 2 + 1, col = (o - 0x2000) % 80;
+    if (line >= 200)
+        return false;
+    *x = (float)(col * 8 + (7 - bit)) + 0.5f;
+    *y = ((float)line + 0.5f) * SY;
+    return true;
+}
+
+/* Line through the sprite pixels (principal axis in output space), ends at the extreme pixels, a = the end
+ * nearer to the hub byte. Thickness = the area of the pixels over the length. */
+static bool needle_fit(const Sprite *s, int hub_o, Needle *n)
+{
+    double sx = 0, sy = 0, cnt = 0, cx = 0, cy = 0, sxx = 0, syy = 0, sxy = 0, ux = 0, uy = 0, tmin = 1e9, tmax = -1e9;
+    for (int pass = 0; pass < 3; pass++) {
+        if (pass == 0) {
+            sx = sy = cnt = 0;
+        } else if (pass == 1) {
+            if (cnt < 4)
+                return false;
+            cx = sx / cnt, cy = sy / cnt, sxx = syy = sxy = 0;
+        } else {
+            double th = 0.5 * atan2(2 * sxy, sxx - syy);
+            ux = cos(th), uy = sin(th), tmin = 1e9, tmax = -1e9;
+        }
+        for (int i = 0; i < s->n; i++) {
+            int o = s->touched[i];
+            for (int bit = 0; bit < 8 && s->bits[o]; bit++) {
+                float x, y;
+                if (!(s->bits[o] >> bit & 1) || !vram_pixel_pos(o, bit, &x, &y))
+                    continue;
+                if (pass == 0)
+                    sx += x, sy += y, cnt++;
+                else if (pass == 1)
+                    sxx += (x - cx) * (x - cx), syy += (y - cy) * (y - cy), sxy += (x - cx) * (y - cy);
+                else {
+                    double t = (x - cx) * ux + (y - cy) * uy;
+                    tmin = t < tmin ? t : tmin, tmax = t > tmax ? t : tmax;
+                }
+            }
+        }
+        if (pass == 2) {
+            tmin -= 0.5, tmax += 0.5;
+            SDL_FPoint p = { (float)(cx + ux * tmin), (float)(cy + uy * tmin) };
+            SDL_FPoint q = { (float)(cx + ux * tmax), (float)(cy + uy * tmax) };
+            float hx = 0, hy = 0; /* the hub: left edge of its byte, centre of its line */
+            vram_pixel_pos(hub_o, 7, &hx, &hy);
+            hx -= 0.5f;
+            bool p_first = (p.x - hx) * (p.x - hx) + (p.y - hy) * (p.y - hy) <= (q.x - hx) * (q.x - hx) + (q.y - hy) * (q.y - hy);
+            n->a = p_first ? p : q, n->b = p_first ? q : p;
+            n->width = (float)(cnt * SY / (tmax - tmin)) * needle_scale;
+        }
+    }
+    /* colour: the most frequent non-empty nibble of the sprite (one fat pixel = 4 hi-res pixels) */
+    int hist[16] = { 0 }, best = 15;
+    for (int i = 0; i < s->n; i++) {
+        uint8_t v = s->bits[s->touched[i]];
+        if (v)
+            hist[v >> 4]++, hist[v & 15]++;
+    }
+    hist[0] = 0;
+    for (int v = 1; v < 16; v++)
+        if (hist[v] > hist[best])
+            best = v;
+    uint8_t nib = (uint8_t)best;
+    n->col = pattern_colour(&nib, 1);
+    return true;
+}
+
+void sharp_render_cga(const Pc *pc, uint32_t *px)
+{
+    static uint8_t vram[VRAM_SIZE];
+    static Sprite spr;
+    static uint8_t all[VRAM_SIZE];
+    n_needles = 0;
+    panel_frame++;
+    uint32_t cseg = m16(pc, 0x122);
+    if (!pc->composite || (pc->cga_mode & 0x1E) != 0x1A || cseg == 0 || cseg == 0xB800 ||
+        (cseg << 4) + VRAM_SIZE > 0xA0000) {
+        pc_render_cga(pc, px);
+        return;
+    }
+    memcpy(vram, pc->mem + 0xB8000, VRAM_SIZE);
+    const uint8_t *clean = pc->mem + (cseg << 4);
+    static uint16_t done[8 * MAX_TOUCH];
+    int n_done = 0;
+    for (size_t k = 0; k < sizeof needle_defs / sizeof *needle_defs; k++) {
+        uint8_t code;
+        int hub_o;
+        Needle *n = &needles[n_needles];
+        for (int pass = 0; pass < 2; pass++) { /* the listed sprite table first, then the other one */
+            uint16_t table = pass == 0 ? needle_defs[k].table : (needle_defs[k].table == 0x961 ? 0x98F : 0x961);
+            if (needle_bits(pc, vram, needle_defs[k].desc, table, &spr, &code, &hub_o) && needle_fit(&spr, hub_o, n)) {
+                n->desc = needle_defs[k].desc, n->code = code;
+                n_needles++;
+                for (int i = 0; i < spr.n && n_done < 8 * MAX_TOUCH; i++) {
+                    all[spr.touched[i]] |= spr.bits[spr.touched[i]];
+                    done[n_done++] = spr.touched[i];
+                }
+                if (panel_dump)
+                    fprintf(panel_dump, "frame %ld desc %04X table %04X code %02X a %.1f,%.1f b %.1f,%.1f w %.2f col %.2f,%.2f,%.2f\n",
+                            panel_frame, n->desc, table, code, n->a.x, n->a.y, n->b.x, n->b.y, n->width, n->col.r, n->col.g, n->col.b);
+                break;
+            }
+        }
+    }
+    for (int i = 0; i < n_done; i++) { /* the needle bits out, the clean panel's in; each byte once */
+        int o = done[i];
+        if (all[o])
+            vram[o] = (uint8_t)((vram[o] & ~all[o]) | (clean[o] & all[o])), all[o] = 0;
+    }
+    pc_render_cga_vram(pc, vram, px);
+}
+
+/* A needle: a quad from the hub end (full width) to the tip (a little narrower). */
+static void needle_quad(const Needle *n)
+{
+    float dx = n->b.x - n->a.x, dy = n->b.y - n->a.y, len = sqrtf(dx * dx + dy * dy);
+    if (len < 1e-3f)
+        return;
+    dx /= len, dy /= len;
+    float h0 = n->width * 0.55f, h1 = n->width * 0.3f;
+    SDL_FPoint nx = { -dy, dx };
+    quad_out((SDL_FPoint){ n->a.x + nx.x * h0, n->a.y + nx.y * h0 }, (SDL_FPoint){ n->b.x + nx.x * h1, n->b.y + nx.y * h1 },
+             (SDL_FPoint){ n->b.x - nx.x * h1, n->b.y - nx.y * h1 }, (SDL_FPoint){ n->a.x - nx.x * h0, n->a.y - nx.y * h0 }, n->col);
+}
+
+static void panel_draw(SDL_Renderer *r)
+{
+    n_verts = n_idx = n_hair = 0;
+    for (int i = 0; i < n_needles; i++)
+        needle_quad(&needles[i]);
+    flush_clip(r, NULL);
+}
+
 bool sharp_view(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga)
 {
+    panel_draw(renderer);
     const DlFrame *f = dl_view();
     if (!f || f->incomplete || !pc->composite || (pc->cga_mode & 0x1E) != 0x1A)
         return false;

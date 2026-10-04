@@ -815,7 +815,10 @@ SDL_AppResult SDL_AppIterate(void *appstate)
         SDL_PutAudioStreamData(app->audio, app->samples, n * (int)sizeof(float));
 
     pc->blink_phase = (SDL_GetTicks() / 267) & 1; /* CGA blinks at ~1.9 Hz */
-    pc_render_cga(pc, app->pixels);
+    if (enh.sharp)                                                      /* ENH: sharp panel (needles) */
+        sharp_render_cga(pc, app->pixels);
+    else
+        pc_render_cga(pc, app->pixels);
     SDL_UpdateTexture(app->screen, NULL, app->pixels, CGA_W * sizeof(uint32_t));
     SDL_SetRenderDrawColor(app->renderer, 0, 0, 0, 255);
     SDL_RenderClear(app->renderer);

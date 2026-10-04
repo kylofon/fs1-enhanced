@@ -842,7 +842,11 @@ static int hires_pixel(const uint8_t *row, int x)
 
 void pc_render_cga(const Pc *pc, uint32_t *px)
 {
-    const uint8_t *vram = pc->mem + 0xB8000;
+    pc_render_cga_vram(pc, pc->mem + 0xB8000, px); /* ENH: sharp panel renders a patched copy */
+}
+
+void pc_render_cga_vram(const Pc *pc, const uint8_t *vram, uint32_t *px)
+{
     uint8_t mode = pc->cga_mode, color = pc->cga_color;
 
     if (!(mode & 0x08)) { /* video disabled */

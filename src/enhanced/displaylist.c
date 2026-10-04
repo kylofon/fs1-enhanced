@@ -97,11 +97,17 @@ static bool chk_atexit_set;
 /* Polygons whose flood fill (fat pixels changed since the last sync) differs much from the vector area. */
 static struct { uint32_t frame; int x0, y0, x1, y1, changed; float area; } chk_poly[8];
 static int chk_poly_n, chk_poly_total, chk_poly_all;
+static int chk_unfilled_vis; /* polygons whose flood fill filled nothing although their outline is on screen */
+static struct { uint32_t frame; uint16_t pat; uint8_t col; int px; } chk_unf[6];
 
 static void chk_report(void)
 {
     if (!chk_n_pairs)
         fprintf(stderr, "dl-check: every back-buffer write was recorded\n");
+    fprintf(stderr, "dl-check: %d polygons with a visible outline were not filled by the game\n", chk_unfilled_vis);
+    for (int i = 0; i < chk_unfilled_vis && i < 6; i++)
+        fprintf(stderr, "dl-check:   frame %u: %d outline pixels, fill pattern %04X, colour %02X\n", chk_unf[i].frame, chk_unf[i].px,
+                chk_unf[i].pat, chk_unf[i].col);
     fprintf(stderr, "dl-check: %d of %d filled polygons differ from their vector area (fill vs outline)\n", chk_poly_total,
             chk_poly_all);
     for (int i = 0; i < chk_poly_n; i++)
@@ -534,6 +540,17 @@ void dl_poly_end_(Pc *pc)
     if (slot < 0 || slot >= f->n_items || f->items[slot].kind != DL_POLY)
         return;
     if (span_fills == 0) { /* the flood fill filled nothing (night, radar view, or a blocked seed) */
+        if (chk_on) {
+            int a, b, c, d, n = diff_pixels(pc, poly_snap, &a, &b, &c, &d);
+            if (n > 0) {
+                if (chk_unfilled_vis < 6)
+                    {
+                        chk_unf[chk_unfilled_vis].frame = f->number + 1, chk_unf[chk_unfilled_vis].pat = d16(pc, 0x31CE);
+                        chk_unf[chk_unfilled_vis].col = d8(pc, COLOUR_BYTE), chk_unf[chk_unfilled_vis].px = n;
+                    }
+                chk_unfilled_vis++;
+            }
+        }
         float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f; /* it may still have marked seed pixels by the outline */
         for (int i = poly_edges_from; i < f->n_items; i++) {
             const DlItem *e = &f->items[i];

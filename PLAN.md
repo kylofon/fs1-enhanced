@@ -145,6 +145,11 @@ Notes:
   menus, panel text, editor), not only in flight. Verified: `verify_campaign.py` OK, 1500-frame run cycles identical to
   `--classic` (119317525), ~900 text rows seen on the start-up screen. Shifted text (print_str2) is cell-quantised to
   whole nibbles. Not checked by eye (U1).
+  Follow-ups (same session, after the first U1 build): `text_detect` also finds buffered/blitted text (flight status,
+  radio) by matching the game's glyphs in video RAM; glyphs found this way are drawn with the 8x8 text font (`pc->font`),
+  white (grey when dim), one rectangle per lit run; unclaimed rows (shifted text, panel art) keep the smoothed cells
+  (strokes on the hi-res pixel grid, no composite colour fringes). Details in `docs/RENDER.md`. U1 should judge this
+  version: the letters now look like the 8x8 font, not the game's thin 16x5 shapes (a deliberate change).
 
 ## User tasks
 ### U1 — Visual checks (when an agent asks)

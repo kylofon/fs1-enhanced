@@ -470,14 +470,85 @@ static bool needle_fit(const Sprite *s, int hub_o, Needle *n)
 static uint8_t tcell[TCELL_W * TCELL_H]; /* nibble of each fat pixel that belongs to text, 0 = none */
 static int n_tcell;
 
-static void text_collect(const Pc *pc, uint8_t *vram)
+/* The font's glyph rows (masks FFFF and 8888, the two the game uses) for the detection below; 0 = not found. */
+#define N_GLYPH 0x60
+static uint16_t glyph_rows[2 * N_GLYPH][5];
+static int n_glyph;
+
+static bool font_load(const Pc *pc)
+{
+    uint32_t base = (uint32_t)m16(pc, (0x50u << 4) + 0x1247);
+    static const uint16_t segs[2] = { 0x618, 0x686 };
+    for (int k = 0; k < 2; k++) {
+        const uint8_t *f = pc->mem + ((uint32_t)segs[k] << 4) + base;
+        bool ok = true;
+        for (int r = 0; r < 5; r++)
+            ok = ok && f[r * 2] == 0 && f[r * 2 + 1] == 0; /* the space is empty */
+        for (int ch = 'A'; ch <= 'Z' && ok; ch++) {
+            int nz = 0;
+            for (int r = 0; r < 10; r++)
+                nz += f[(ch - 0x20) * 10 + r] != 0;
+            ok = nz >= 4;
+        }
+        if (!ok)
+            continue;
+        n_glyph = 0;
+        for (int ch = 0x21; ch < 0x80; ch++) {
+            for (int m = 0; m < 2; m++) {
+                int cells = 0;
+                uint16_t *g = glyph_rows[n_glyph];
+                for (int r = 0; r < 5; r++) {
+                    g[r] = (uint16_t)((f[(ch - 0x20) * 10 + r * 2] | f[(ch - 0x20) * 10 + r * 2 + 1] << 8) & (m ? 0x8888 : 0xFFFF));
+                    for (int b = 0; b < 4; b++)
+                        cells += (g[r] >> (b * 4) & 15) != 0;
+                }
+                if (cells >= 3)
+                    n_glyph++;
+            }
+        }
+        return true;
+    }
+    n_glyph = 0;
+    return false;
+}
+
+/* Text that reached the screen by any other route (drawn into a buffer first and blitted, or by code the
+ * hook does not see) is found by looking for the game's glyphs in the video RAM: five stacked rows equal to a
+ * glyph's. Rows from first_line down only (the 3D view above could hold a lookalike). */
+static int text_detect(const uint8_t *real, int first_line, uint16_t *used, int n_used)
+{
+    for (int line = first_line; line + 4 < TCELL_H; line++) {
+        for (int b = 0; b < 79; b++) {
+            int o[5];
+            uint16_t row[5];
+            for (int r = 0; r < 5; r++) {
+                int l = line + r;
+                o[r] = (l & 1) * 0x2000 + (l >> 1) * 80 + b;
+                row[r] = (uint16_t)(real[o[r]] | real[o[r] + 1] << 8);
+            }
+            if (!row[0] && !row[1] && !row[2])
+                continue;
+            for (int g = 0; g < n_glyph; g++) {
+                const uint16_t *gr = glyph_rows[g];
+                if (gr[0] == row[0] && gr[1] == row[1] && gr[2] == row[2] && gr[3] == row[3] && gr[4] == row[4]) {
+                    for (int r = 0; r < 5 && n_used < 2 * VRAM_SIZE; r++)
+                        used[n_used++] = (uint16_t)o[r];
+                    break;
+                }
+            }
+        }
+    }
+    return n_used;
+}
+
+static void text_collect(const Pc *pc, uint8_t *vram, int detect_from)
 {
     uint16_t *w;
     uint8_t *ok;
     if (!dl_text_rows(&w, &ok))
         return;
     const uint8_t *real = pc->mem + 0xB8000;
-    static uint16_t used[VRAM_SIZE];
+    static uint16_t used[2 * VRAM_SIZE];
     int n_used = 0;
     for (int o = 0; o < VRAM_SIZE - 1; o++) {
         if (!ok[o])
@@ -489,6 +560,8 @@ static void text_collect(const Pc *pc, uint8_t *vram)
         if (w[o])
             used[n_used++] = (uint16_t)o;
     }
+    if (font_load(pc))
+        n_used = text_detect(real, detect_from, used, n_used);
     if (!n_used)
         return;
     memset(tcell, 0, sizeof tcell);
@@ -581,7 +654,7 @@ void sharp_render_cga(const Pc *pc, uint32_t *px)
     }
     memcpy(vram, pc->mem + 0xB8000, VRAM_SIZE);
     if (cseg == 0 || cseg == 0xB800 || (cseg << 4) + VRAM_SIZE > 0xA0000) { /* no panel: text only */
-        text_collect(pc, vram);
+        text_collect(pc, vram, 0);
         pc_render_cga_vram(pc, vram, px);
         return;
     }
@@ -613,7 +686,7 @@ void sharp_render_cga(const Pc *pc, uint32_t *px)
         if (all[o])
             vram[o] = (uint8_t)((vram[o] & ~all[o]) | (clean[o] & all[o])), all[o] = 0;
     }
-    text_collect(pc, vram);
+    text_collect(pc, vram, 106);
     pc_render_cga_vram(pc, vram, px);
 }
 

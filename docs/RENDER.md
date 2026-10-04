@@ -201,6 +201,10 @@ colour = uniform-field composite decode of the nibble. The font itself is 4 x 5 
 smoothing of the game's own glyph shapes, not a different font. Screens without a panel (menus, editor) take the same
 path.
 
+Text that reaches the screen another way (drawn into a buffer and blitted, e.g. flight status and radio text) is
+not seen by the hook, so `text_detect` also looks for the game's glyphs in the video RAM (five stacked rows equal to a
+glyph's, masks FFFF/8888, below the 3D view only in flight) and treats a match like a recorded row.
+
 ## 7. Later subtasks
 
 - **S3.2 (smooth frame rate)** needs to re-project between simulation frames; it will add the eye-space

@@ -467,7 +467,8 @@ static bool needle_fit(const Sprite *s, int hub_o, Needle *n)
 
 #define TCELL_W 160
 #define TCELL_H 200
-static uint8_t tcell[TCELL_W * TCELL_H]; /* nibble of each fat pixel that belongs to text, 0 = none */
+static uint8_t tcell[TCELL_W * TCELL_H]; /* fat pixels whose nibble has one bit (dim text): the nibble, 0 = none */
+static uint8_t tbit[4 * TCELL_W * TCELL_H]; /* hi-res pixels of the other nibbles (the glyph strokes): 15 = lit */
 static int n_tcell;
 
 /* The font's glyph rows (masks FFFF and 8888, the two the game uses) for the detection below; 0 = not found. */
@@ -565,20 +566,30 @@ static void text_collect(const Pc *pc, uint8_t *vram, int detect_from)
     if (!n_used)
         return;
     memset(tcell, 0, sizeof tcell);
+    memset(tbit, 0, sizeof tbit);
     for (int k = 0; k < n_used; k++) {
         for (int i = 0; i < 2; i++) {
             int a = used[k] + i, within = a & 0x1FFF, line = within / 80 * 2 + (a >> 13), col = within % 80;
             if (within >= 8000 || line >= TCELL_H)
                 continue;
-            tcell[line * TCELL_W + col * 2] = real[a] >> 4;
-            tcell[line * TCELL_W + col * 2 + 1] = real[a] & 15;
+            for (int k = 0; k < 2; k++) {
+                int nib = k ? real[a] & 15 : real[a] >> 4, bits = __builtin_popcount(nib);
+                if (bits == 1)
+                    tcell[line * TCELL_W + col * 2 + k] = (uint8_t)nib;
+                else
+                    for (int j = 0; j < 4; j++)
+                        if (nib >> (3 - j) & 1)
+                            tbit[line * 4 * TCELL_W + col * 8 + k * 4 + j] = 15;
+            }
             vram[a] = 0;
             n_tcell++;
         }
     }
 }
 
-static int cell_on(int x, int y) { return x >= 0 && y >= 0 && x < TCELL_W && y < TCELL_H && tcell[y * TCELL_W + x]; }
+static const uint8_t *g_cells;
+static int g_w;
+static int cell_on(int x, int y) { return x >= 0 && y >= 0 && x < g_w && y < TCELL_H && g_cells[y * g_w + x]; }
 
 static void fan(const SDL_FPoint *p, int n, SDL_FColor c)
 {
@@ -590,24 +601,15 @@ static void fan(const SDL_FPoint *p, int n, SDL_FColor c)
         idx[n_idx++] = i, idx[n_idx++] = i + k, idx[n_idx++] = i + k + 1;
 }
 
-static void text_draw(SDL_Renderer *r)
+/* One grid of cells (gw wide, cw output pixels each) as smoothed shapes: every cell a rectangle with its convex
+ * corners cut, a small rhombus where two cells touch only diagonally. */
+static void draw_grid(const uint8_t *g, int gw, float cw, const SDL_FColor *ncol)
 {
-    if (!n_tcell)
-        return;
-    static SDL_FColor ncol[16];
-    static bool ncol_ready;
-    if (!ncol_ready) {
-        for (int n = 1; n < 16; n++) {
-            uint8_t nib[2] = { (uint8_t)n, (uint8_t)n };
-            ncol[n] = pattern_colour(nib, 2);
-        }
-        ncol_ready = true;
-    }
-    n_verts = n_idx = n_hair = 0;
-    const float cw = 4.0f, ch = SY, kx = 0.3f * cw, ky = 0.3f * ch;
+    g_cells = g, g_w = gw;
+    const float ch = SY, kx = (cw < 2 ? 0.5f : 0.3f) * cw, ky = 0.35f * ch;
     for (int y = 0; y < TCELL_H; y++) {
-        for (int x = 0; x < TCELL_W; x++) {
-            int v = tcell[y * TCELL_W + x];
+        for (int x = 0; x < gw; x++) {
+            int v = g[y * gw + x];
             if (!v)
                 continue;
             int n = cell_on(x, y - 1), s = cell_on(x, y + 1), e = cell_on(x + 1, y), wst = cell_on(x - 1, y);
@@ -635,6 +637,24 @@ static void text_draw(SDL_Renderer *r)
             }
         }
     }
+}
+
+static void text_draw(SDL_Renderer *r)
+{
+    if (!n_tcell)
+        return;
+    static SDL_FColor ncol[16];
+    static bool ncol_ready;
+    if (!ncol_ready) {
+        for (int n = 1; n < 16; n++) {
+            uint8_t nib[2] = { (uint8_t)n, (uint8_t)n };
+            ncol[n] = pattern_colour(nib, 2);
+        }
+        ncol_ready = true;
+    }
+    n_verts = n_idx = n_hair = 0;
+    draw_grid(tcell, TCELL_W, 4.0f, ncol);
+    draw_grid(tbit, 4 * TCELL_W, 1.0f, ncol); /* strokes: lit hi-res pixels in the colour of a full nibble */
     flush_clip(r, NULL);
 }
 

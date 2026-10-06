@@ -18,7 +18,6 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 | Task | What to do | For | Time |
 |---|---|---|---|
-| U1 | S2.5 module layout: `cmake --build build`, run `build/fs1-enhanced.exe --module-outline`, take off (A, B at the menus) and check that every orange box sits around one whole instrument/box (airspeed, attitude, altimeter, OMI, turn, heading, VSI+trim, tach, throttle strip, compass, fuel/oil, status column, COM, NAV, TRANSPONDER, TIME) without cutting into a neighbour. Reply `OK` or which box is off and how | S2.5 | 3 min |
 | U1 | S2.4 sharp panel labels: close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` next to `--classic`, take off (A, B at the menus) and look at the panel labels (COMPASS, FUEL, OIL, COM, NAV, TRANSPONDER, TIME, KNOTS, GEAR/LIGHTS/MAGS/CARB, gauge numerals): they should be crisp white strokes, same letters and place as classic, no leftover coloured dots. Reply `OK` or what is wrong (missing/odd letters, too thin, colour) | S2.4 | 3 min |
 | U1 | S1.3 + S2.2 result 2026-10-06: menus and 3D graphics OK. Cockpit: values sharp, labels not (= S2.4), some values broken (right-hand panel column GEAR/LIGHTS/MAGS/CARB shows `bc`, `f g`, `l`; `yyy` under OMI; check heading `330`). Next session: fix broken values (S2.2 bug), then S2.4. Send a `--classic` screenshot of the same frame if the broken values differ from it | S2.2 | 3 min |
 | U1 | S2.2 sharp text (re-check after the fix): close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` next to `--classic` and look at the start-up menus, the flight status/radio text and the editor screens: the letters should be smooth at any window size, same colour and place as classic. Reply `OK` or what is wrong (blurry/missing letters, leftover pixel letters, wrong colour, text that does not vanish when the game erases it) | S2.2 | 5 min |
@@ -27,7 +26,7 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 ## Status
 
-- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending), S2.4 (U1 pending), S2.5 (U1 pending).
+- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending), S2.4 (U1 pending), S2.5.
 - **Next:** the cockpit modules S2.6–S2.19 (Sonnet), one per session, in any order; `docs/PANEL.md` says how. Decisions D1–D4 below are binding.
 - Escalation rule: a subtask that fails twice on Sonnet → new Opus session with a 5-line note
   (symptom, file, what was tried). Never carry an old transcript over.
@@ -91,7 +90,7 @@ a time. Every module subtask: measure the layout from the clean panel (cseg:0122
 
 | Id | Task | Model | Size | Status |
 |---|---|---|---|---|
-| S2.5 | Module framework (`src/enhanced/panel/`): module registry (rect in hi-res pixels/scan lines, enable flag, `--module-off NAME`), blank the rect in the CGA copy, a vector kit (circle/arc, ticks along an arc, filled boxes, lines), one panel font (vector or 8x8-based, any size/rotation, white + panel colours from the composite decode), shared palette; measure and list every module rect (`docs/PANEL.md`); no module drawn yet beyond a debug outline (`--module-outline`) | O | M | done 2026-10-06, U1 pending |
+| S2.5 | Module framework (`src/enhanced/panel/`): module registry (rect in hi-res pixels/scan lines, enable flag, `--module-off NAME`), blank the rect in the CGA copy, a vector kit (circle/arc, ticks along an arc, filled boxes, lines), one panel font (vector or 8x8-based, any size/rotation, white + panel colours from the composite decode), shared palette; measure and list every module rect (`docs/PANEL.md`); no module drawn yet beyond a debug outline (`--module-outline`) | O | M | done 2026-10-06, U1 OK 2026-10-06 |
 | S2.6 | Airspeed indicator (KNOTS, 40-200 scale, needle) | S | M | |
 | S2.7 | Attitude indicator (replaces S2.3: sky/ground split with sub-pixel horizon, bank marks and pointer, aircraft symbol) | S | M | |
 | S2.8 | Altimeter (ALT, 0-9 scale, both hands, the small 100s/1000s window) | S | M | |

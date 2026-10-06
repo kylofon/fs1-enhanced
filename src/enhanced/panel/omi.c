@@ -24,7 +24,7 @@ static void circle_fill(float x, float y, float r, SDL_FColor c) { kit_fill_elli
 
 static void lamp(float x, char letter, bool on, SDL_FColor lit)
 {
-    const float y = 117.5f, r = 5.5f;
+    const float y = 117.5f + 3.0f / KIT_SY, r = 5.5f; /* 3 output pixels lower than the first version */
     kit_fill_ellipse(x, y, r + 0.8f, (r + 0.8f) / KIT_SY, kit_grey);
     circle_fill(x, y, r, on ? lit : kit_face);
     char s[2] = { letter, 0 };

@@ -18,6 +18,7 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 | Task | What to do | For | Time |
 |---|---|---|---|
+| U1 | S2.6 airspeed module: close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` next to `--classic` (`--module-off airspeed` shows the old look), take off (A, B at the menus, F2) and watch the airspeed dial (left): ring, ticks every 10 kt, numbers 40-200, KNOTS, needle. Reply `OK` or what is wrong (needle angle vs the numbers, size/overlap of the numbers, ring, colours, gaps in the glareshield line above) | S2.6 | 3 min |
 | U1 | S2.4 sharp panel labels: close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` next to `--classic`, take off (A, B at the menus) and look at the panel labels (COMPASS, FUEL, OIL, COM, NAV, TRANSPONDER, TIME, KNOTS, GEAR/LIGHTS/MAGS/CARB, gauge numerals): they should be crisp white strokes, same letters and place as classic, no leftover coloured dots. Reply `OK` or what is wrong (missing/odd letters, too thin, colour) | S2.4 | 3 min |
 | U1 | S1.3 + S2.2 result 2026-10-06: menus and 3D graphics OK. Cockpit: values sharp, labels not (= S2.4), some values broken (right-hand panel column GEAR/LIGHTS/MAGS/CARB shows `bc`, `f g`, `l`; `yyy` under OMI; check heading `330`). Next session: fix broken values (S2.2 bug), then S2.4. Send a `--classic` screenshot of the same frame if the broken values differ from it | S2.2 | 3 min |
 | U1 | S2.2 sharp text (re-check after the fix): close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` next to `--classic` and look at the start-up menus, the flight status/radio text and the editor screens: the letters should be smooth at any window size, same colour and place as classic. Reply `OK` or what is wrong (blurry/missing letters, leftover pixel letters, wrong colour, text that does not vanish when the game erases it) | S2.2 | 5 min |
@@ -26,8 +27,8 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 ## Status
 
-- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending), S2.4 (U1 pending), S2.5.
-- **Next:** the cockpit modules S2.6–S2.19 (Sonnet), one per session, in any order; `docs/PANEL.md` says how. Decisions D1–D4 below are binding.
+- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending), S2.4 (U1 pending), S2.5, S2.6 (U1 pending).
+- **Next:** the cockpit modules S2.7–S2.19 (Sonnet), one per session, in any order; `docs/PANEL.md` says how. Decisions D1–D4 below are binding.
 - Escalation rule: a subtask that fails twice on Sonnet → new Opus session with a 5-line note
   (symptom, file, what was tried). Never carry an old transcript over.
 
@@ -91,7 +92,7 @@ a time. Every module subtask: measure the layout from the clean panel (cseg:0122
 | Id | Task | Model | Size | Status |
 |---|---|---|---|---|
 | S2.5 | Module framework (`src/enhanced/panel/`): module registry (rect in hi-res pixels/scan lines, enable flag, `--module-off NAME`), blank the rect in the CGA copy, a vector kit (circle/arc, ticks along an arc, filled boxes, lines), one panel font (vector or 8x8-based, any size/rotation, white + panel colours from the composite decode), shared palette; measure and list every module rect (`docs/PANEL.md`); no module drawn yet beyond a debug outline (`--module-outline`) | O | M | done 2026-10-06, U1 OK 2026-10-06 |
-| S2.6 | Airspeed indicator (KNOTS, 40-200 scale, needle) | S | M | |
+| S2.6 | Airspeed indicator (KNOTS, 40-200 scale, needle) | S | M | done 2026-10-06, U1 pending |
 | S2.7 | Attitude indicator (replaces S2.3: sky/ground split with sub-pixel horizon, bank marks and pointer, aircraft symbol) | S | M | |
 | S2.8 | Altimeter (ALT, 0-9 scale, both hands, the small 100s/1000s window) | S | M | |
 | S2.9 | OMI/VOR indicator (OBS card, CDI bar, TO/FROM, the 3-digit OBS window, bottom heading box) | S | M | |
@@ -194,6 +195,11 @@ Notes:
   `pattern_colour` moved to `kit_composite`. `--module-off NAME|all`, `--module-outline`. No module drawn yet (all `draw` NULL), so the
   picture is unchanged. Verified with a throwaway airspeed module: rect blanked (coloured pixels 3208 -> 123), needle 0x92F and 20
   text hits delivered, `--module-off airspeed` restores the old look; cycles identical to `--classic` (73019456 at frame 910).
+- S2.6: `src/enhanced/panel/airspeed.{h,c}`. Dial measured from the clean panel (ring x 5..105, lines 123..167, centre 55,145; labels 40..200
+  every 20 kt, 40 at the upper right, clockwise, 120 at the bottom). Needle angle is the game's own: `ias = airspeed(DS:08A8) * 28Fh >> 16`
+  clamped 33h..100h, angle = (ias - 25) * 360/256 (checked against the S2.1 fitted needles at 40..200 kt: within ~3 deg, the fit's error);
+  ias = 1.28 * knots, so the ticks sit at the exact needle angles. Rect shrunk to y 121..168 so the glareshield arc (lines 108-118) stays.
+  Everything drawn: face, bezel, 10-kt ticks, numerals, KNOTS, needle with tail and hub. Cycles identical to `--classic` (73093945 at frame 910, keys 120:A,180:B).
 
 ## User tasks
 ### U1 — Visual checks (when an agent asks)

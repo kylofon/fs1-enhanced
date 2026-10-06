@@ -6,5 +6,6 @@
 - `--classic`: every enhancement off (there are none yet).
 - Cockpit module framework (S2.5): the panel is divided into instrument modules that will each be redrawn whole as
   vectors (`--module-off NAME|all`, `--module-outline`); see docs/PANEL.md.
+- Airspeed indicator (S2.6) redrawn as a vector module: ring, ticks, numerals, KNOTS and the needle from the game's airspeed.
 - Sharp panel (S2.1): the airspeed, altimeter, VSI and tachometer needles are drawn as vector lines at window
   size; the pixel needle sprites are taken out of the picture (`--needle-width F`, `--dump-panel FILE`).

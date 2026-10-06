@@ -1,4 +1,4 @@
-/* Panel frame module (S2.19): everything of the clean panel image from line 106 down that lies outside the
+/* Panel frame module (S2.19): everything of the clean panel image from line 107 down that lies outside the
  * instrument modules' rects (the glareshield, the double lines between the modules, the box frames, the dotted
  * tracks of the aileron and rudder indicators). It is read from the clean image, once per image:
  *   - horizontal runs (a single missing pixel allowed, so dotted lines count) of 12+ pixels become lines,
@@ -14,7 +14,7 @@
 
 #define W 640
 #define H 200
-#define Y0 106
+#define Y0 107 /* lines 0..106 of the clean image are scratch (the view's working copy), not panel */
 
 typedef struct Seg {
     float x0, y0, x1, y1;
@@ -123,7 +123,7 @@ void frame_draw(const CockpitFrame *f, const CockpitModule *m)
     for (int i = 0; i < n_segs; i++) {
         const Seg *s = &segs[i];
         bool horizontal = s->y0 == s->y1;
-        float w = horizontal ? 1.8f : 1.2f;
+        float w = horizontal ? 2.4f : 1.2f; /* a horizontal line fills its scan line exactly: no halo of the fill behind it */
         /* a pixel-wide run: lines are drawn from end to end, without the cap kit_line adds */
         kit_needle(s->x0, s->y0, s->x1, s->y1, w, w, s->dotted ? kit_grey : kit_white);
     }

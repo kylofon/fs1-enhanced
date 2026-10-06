@@ -33,8 +33,8 @@ static CockpitModule modules[] = {
     { "nav", "S2.18 radio stack: NAV", { 445, 157, 537, 169 }, radio_draw, false },
     { "transponder", "S2.18 radio stack: TRANSPONDER", { 445, 171, 561, 183 }, radio_draw, false },
     { "time", "S2.18 radio stack: TIME", { 445, 185, 561, 197 }, radio_draw, false },
-    /* S2.19: everything else of the panel (below the view, line 106 on): frame lines, glareshield, tracks */
-    { "frame", "S2.19 panel frame", { 0, 106, 639, 199 }, frame_draw, true },
+    /* S2.19: everything else of the panel (below the view, line 107 on): frame lines, glareshield, tracks */
+    { "frame", "S2.19 panel frame", { 0, 107, 639, 199 }, frame_draw, true },
 };
 #define N_MODULES (int)(sizeof modules / sizeof *modules)
 
@@ -79,18 +79,18 @@ void cockpit_begin(const Pc *pc, const uint8_t *clean)
     if (!gap_on)
         return;
     static int raw[640];
-    for (int x = 0; x < 640; x++) { /* the first lit line of the clean panel from line 106 down (at most 125) */
-        int y = 106;
+    for (int x = 0; x < 640; x++) { /* the first lit line of the clean panel from line 107 down (at most 125) */
+        int y = 107; /* lines 0..106 of the clean image change from frame to frame */
         while (y < 125 && !(clean[(y & 1) * 0x2000 + (y >> 1) * 80 + (x >> 3)] >> (7 - (x & 7)) & 1))
             y++;
         raw[x] = y;
     }
-    for (int x = 0; x < 640; x++) { /* dotted lines: the smallest of the neighbours */
+    for (int x = 0; x < 640; x++) { /* up to and including the frame line; dotted lines: the lowest of the neighbours */
         int m = raw[x];
-        for (int d = -2; d <= 2; d++)
-            if (x + d >= 0 && x + d < 640 && raw[x + d] < m)
+        for (int d = -1; d <= 1; d++)
+            if (x + d >= 0 && x + d < 640 && raw[x + d] > m)
                 m = raw[x + d];
-        gap_y[x] = m;
+        gap_y[x] = m + 1;
     }
 }
 

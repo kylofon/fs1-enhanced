@@ -23,6 +23,8 @@ void kit_fill_box(float x0, float y0, float x1, float y1, SDL_FColor c);
 void kit_arc(float cx, float cy, float rx, float ry, float a0, float a1, float w, SDL_FColor c);
 void kit_ellipse(float cx, float cy, float rx, float ry, float w, SDL_FColor c);
 void kit_fill_ellipse(float cx, float cy, float rx, float ry, SDL_FColor c);
+/* A filled convex polygon: n points (x,y pairs, panel units), fanned from the first. */
+void kit_fill_poly(const float *xy, int n, SDL_FColor c);
 /* n ticks evenly from a0 to a1 (inclusive), from radius fraction r_in to 1 of the ellipse. */
 void kit_ticks(float cx, float cy, float rx, float ry, float a0, float a1, int n, float r_in, float w, SDL_FColor c);
 /* A point on the ellipse at angle a (degrees, 0 = up, clockwise), scaled by f. */

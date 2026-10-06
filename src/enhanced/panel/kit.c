@@ -145,6 +145,18 @@ void kit_fill_ellipse(float cx, float cy, float rx, float ry, SDL_FColor c)
     }
 }
 
+void kit_fill_poly(const float *xy, int n, SDL_FColor c)
+{
+    if (n < 3)
+        return;
+    reserve(n, 3 * (n - 2));
+    int i0 = n_verts;
+    for (int i = 0; i < n; i++)
+        verts[n_verts++] = (SDL_Vertex){ out(xy[2 * i], xy[2 * i + 1]), c, { 0, 0 } };
+    for (int i = 1; i + 1 < n; i++)
+        idx[n_idx++] = i0, idx[n_idx++] = i0 + i, idx[n_idx++] = i0 + i + 1;
+}
+
 void kit_ticks(float cx, float cy, float rx, float ry, float a0, float a1, int n, float r_in, float w, SDL_FColor c)
 {
     for (int i = 0; i < n; i++) {

@@ -1,6 +1,7 @@
 /* Cockpit modules, see cockpit.h and docs/PANEL.md. */
 #include "enhanced/panel/cockpit.h"
 #include "enhanced/panel/airspeed.h"
+#include "enhanced/panel/altimeter.h"
 #include "enhanced/panel/attitude.h"
 #include "enhanced/panel/kit.h"
 
@@ -11,7 +12,7 @@
 static CockpitModule modules[] = {
     { "airspeed", "S2.6 airspeed indicator", { 4, 121, 106, 168 }, airspeed_draw },
     { "attitude", "S2.7 attitude indicator", { 109, 113, 211, 158 }, attitude_draw },
-    { "altimeter", "S2.8 altimeter", { 212, 113, 316, 158 }, NULL },
+    { "altimeter", "S2.8 altimeter", { 212, 113, 316, 158 }, altimeter_draw },
     { "omi", "S2.9 OMI/VOR indicator", { 317, 113, 421, 158 }, NULL },
     { "turn", "S2.10 turn coordinator", { 12, 169, 100, 199 }, NULL },
     { "heading", "S2.11 heading indicator", { 116, 163, 203, 199 }, NULL },

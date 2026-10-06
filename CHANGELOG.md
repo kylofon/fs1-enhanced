@@ -8,5 +8,6 @@
   vectors (`--module-off NAME|all`, `--module-outline`); see docs/PANEL.md.
 - Airspeed indicator (S2.6) redrawn as a vector module: ring, ticks, numerals, KNOTS and the needle from the game's airspeed.
 - Attitude indicator (S2.7) redrawn as a vector module: sub-pixel horizon from the game's bank and pitch, roll scale and pointer, aircraft symbol.
+- Altimeter (S2.8) redrawn as a vector module: scale, numerals, long and short hands from the game's altitude.
 - Sharp panel (S2.1): the airspeed, altimeter, VSI and tachometer needles are drawn as vector lines at window
   size; the pixel needle sprites are taken out of the picture (`--needle-width F`, `--dump-panel FILE`).

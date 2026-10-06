@@ -18,6 +18,7 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 | Task | What to do | For | Time |
 |---|---|---|---|
+| U1 | S2.8 altimeter: close the game, `cmake --build build`, run next to `--classic` (`--module-off altimeter` = old look), take off and climb: ring, 50 ticks, numerals 0-9, ALT, long hand (1000 ft/turn) and short thick hand (10000 ft/turn). Reply `OK` or what is wrong (hand angles vs classic, sizes, the small boxed label in the old dial that is NOT redrawn, see notes) | S2.8 | 3 min |
 | U1 | S2.7 attitude indicator: close the game, `cmake --build build`, run next to `--classic` (`--module-off attitude` = old look), take off and bank/pitch (keys, or `--poke` in a test run): sky/ground split with a smooth horizon, bank pointer on the disc, fixed roll ticks on the ring, aircraft symbol. Reply `OK` or what is wrong (horizon position or tilt direction vs classic, which side is sky, pointer direction, sizes, colours) | S2.7 | 3 min |
 | U1 | S2.6 airspeed module (numbers 15% smaller after your first look): close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` next to `--classic` (`--module-off airspeed` shows the old look), take off (A, B at the menus, F2) and watch the airspeed dial (left): ring, ticks every 10 kt, numbers 40-200, KNOTS, needle. Reply `OK` or what is wrong (needle angle vs the numbers, size/overlap of the numbers, ring, colours, gaps in the glareshield line above) | S2.6 | 3 min |
 | U1 | S2.4 sharp panel labels: close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` next to `--classic`, take off (A, B at the menus) and look at the panel labels (COMPASS, FUEL, OIL, COM, NAV, TRANSPONDER, TIME, KNOTS, GEAR/LIGHTS/MAGS/CARB, gauge numerals): they should be crisp white strokes, same letters and place as classic, no leftover coloured dots. Reply `OK` or what is wrong (missing/odd letters, too thin, colour) | S2.4 | 3 min |
@@ -28,8 +29,8 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 ## Status
 
-- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending), S2.4 (U1 pending), S2.5, S2.6 (U1 pending), S2.7 (U1 pending).
-- **Next:** the cockpit modules S2.8–S2.19 (Sonnet), one per session, in any order; `docs/PANEL.md` says how. Decisions D1–D4 below are binding.
+- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending), S2.4 (U1 pending), S2.5, S2.6 (U1 pending), S2.7 (U1 pending), S2.8 (U1 pending).
+- **Next:** the cockpit modules S2.9–S2.19 (Sonnet), one per session, in any order; `docs/PANEL.md` says how. Decisions D1–D4 below are binding.
 - Escalation rule: a subtask that fails twice on Sonnet → new Opus session with a 5-line note
   (symptom, file, what was tried). Never carry an old transcript over.
 
@@ -95,7 +96,7 @@ a time. Every module subtask: measure the layout from the clean panel (cseg:0122
 | S2.5 | Module framework (`src/enhanced/panel/`): module registry (rect in hi-res pixels/scan lines, enable flag, `--module-off NAME`), blank the rect in the CGA copy, a vector kit (circle/arc, ticks along an arc, filled boxes, lines), one panel font (vector or 8x8-based, any size/rotation, white + panel colours from the composite decode), shared palette; measure and list every module rect (`docs/PANEL.md`); no module drawn yet beyond a debug outline (`--module-outline`) | O | M | done 2026-10-06, U1 OK 2026-10-06 |
 | S2.6 | Airspeed indicator (KNOTS, 40-200 scale, needle) | S | M | done 2026-10-06, U1 pending |
 | S2.7 | Attitude indicator (replaces S2.3: sky/ground split with sub-pixel horizon, bank marks and pointer, aircraft symbol) | S | M | done 2026-10-06, U1 pending |
-| S2.8 | Altimeter (ALT, 0-9 scale, both hands, the small 100s/1000s window) | S | M | |
+| S2.8 | Altimeter (ALT, 0-9 scale, both hands, the small 100s/1000s window) | S | M | done 2026-10-06, U1 pending |
 | S2.9 | OMI/VOR indicator (OBS card, CDI bar, TO/FROM, the 3-digit OBS window, bottom heading box) | S | M | |
 | S2.10 | Turn coordinator (L/R marks, aircraft symbol, ball/inclinometer box) | S | M | |
 | S2.11 | Heading indicator (DG card numerals, lubber line, digital heading box) | S | M | |
@@ -207,6 +208,10 @@ Notes:
   roll ticks (10 deg to 60) and a zero index, disc, pointer that turns with the disc, fixed aircraft symbol and short pitch marks (the original's
   XOR bank dots and symbol are replaced). Cycles identical to `--classic` (73093945 at frame 910). Not checked by eye (U1): the pointer direction
   (bank right -> pointer left of top) follows the instrument convention, not verified against the game's dots.
+- S2.8: `src/enhanced/panel/altimeter.{h,c}`. Both hands from the game state: A = (int16)(altitude word DS:30D6 + ground elev 0906 + offset 1E20) * 6B8Fh / 8000h
+  (1/256 turn); long hand = A mod 256, short hand = A mod 2550 / 10 (1000 / 10000 ft per turn). Checked against the S2.1 fitted needles with a poked altitude
+  (long hand 23.3 deg vs 21.7 fitted; the short hand's sprite is a wedge, the fit is rough, the formula is the game's own). The old dial's small boxed
+  label (x 268..288, lines 130..135, 4 dotted glyphs, static art) is not redrawn: its meaning is unknown (no state drives it). Cycles identical to `--classic`.
 
 ## User tasks
 ### U1 — Visual checks (when an agent asks)

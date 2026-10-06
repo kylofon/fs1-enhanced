@@ -27,7 +27,7 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 ## Status
 
 - **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending), S2.4 (U1 pending).
-- **Next:** U1 checks of S1.3, S2.1 and S2.2, then S2.3 (artificial horizon). Decisions D1–D4 below are binding.
+- **Next:** S2.5 (module framework, Opus), then the cockpit modules S2.6–S2.19, one per session, in any order. Decisions D1–D4 below are binding.
 - Escalation rule: a subtask that fails twice on Sonnet → new Opus session with a 5-line note
   (symptom, file, what was tried). Never carry an old transcript over.
 
@@ -76,8 +76,35 @@ window size. The CGA path stays as the authentic mode (`--classic`, or toggled i
 |---|---|---|---|---|
 | S2.1 | Instrument panel at high resolution: needles as lines/polygons, indicators and sprites upscaled or vector-traced from the original sprite data; **U1 check** | S | L | done 2026-10-04, U1 pending |
 | S2.2 | Text at high resolution: the 16×5 game font rendered as scalable glyphs (vector from the font bits), panel and menu text; editor text mode with a sharp font | S | M | done 2026-10-04, U1 pending |
-| S2.3 | Artificial horizon at high resolution (`gauges.c` `attitude`: row records DS:1BAB, spans 293F, bank dots 5B88/2A3E): sub-pixel horizon line between the sky and ground colours, bank pointer; read the state like S2.1 (section 6b), verify against the video RAM; **U1 check** | S | M | |
+| S2.3 | Artificial horizon at high resolution (`gauges.c` `attitude`: row records DS:1BAB, spans 293F, bank dots 5B88/2A3E): sub-pixel horizon line between the sky and ground colours, bank pointer; read the state like S2.1 (section 6b), verify against the video RAM; **U1 check** | S | M | superseded by S2.7 |
 | S2.4 | Panel labels (COMPASS, FUEL, OIL, COM, NAV, TRANSPONDER, TIME, KNOTS, gauge numerals, GEAR/LIGHTS/MAGS/CARB) at high resolution, like S2.2: they are part of the panel bitmap (not the game font), so find them in the clean panel image (segment at 0000:0122) or from the panel art data, identify each character (own small glyph set of the panel font, or trace), redraw crisp in white/their colour with the 8x8-style font, remove the pixel/fringe version from the CGA copy; text only, gauge faces and scales stay | S | M | done 2026-10-06, U1 pending |
+
+### Phase 2b — Cockpit, module by module
+Change of approach (2026-10-06, after the S2.4 U1 look: letter-by-letter tracing gives an inconsistent
+panel). Each instrument is now redrawn whole as one **module**: its CGA area is blanked in the CGA copy
+and the back end draws the face (bezel circle/box), scale ticks, numerals and labels in one crisp vector
+style, plus the moving parts from the state (needles from S2.1, values from S2.2). Modules not done yet
+keep today's look (S2.1 needles, S2.2 values, S2.4 traced labels), so the panel improves one module at
+a time. Every module subtask: measure the layout from the clean panel (cseg:0122) numerically, draw it,
+`--classic` cycles unchanged, **U1 check** of that module only (side by side with `--classic`).
+
+| Id | Task | Model | Size | Status |
+|---|---|---|---|---|
+| S2.5 | Module framework (`src/enhanced/panel/`): module registry (rect in hi-res pixels/scan lines, enable flag, `--module-off NAME`), blank the rect in the CGA copy, a vector kit (circle/arc, ticks along an arc, filled boxes, lines), one panel font (vector or 8x8-based, any size/rotation, white + panel colours from the composite decode), shared palette; measure and list every module rect (`docs/PANEL.md`); no module drawn yet beyond a debug outline (`--module-outline`) | O | M | |
+| S2.6 | Airspeed indicator (KNOTS, 40-200 scale, needle) | S | M | |
+| S2.7 | Attitude indicator (replaces S2.3: sky/ground split with sub-pixel horizon, bank marks and pointer, aircraft symbol) | S | M | |
+| S2.8 | Altimeter (ALT, 0-9 scale, both hands, the small 100s/1000s window) | S | M | |
+| S2.9 | OMI/VOR indicator (OBS card, CDI bar, TO/FROM, the 3-digit OBS window, bottom heading box) | S | M | |
+| S2.10 | Turn coordinator (L/R marks, aircraft symbol, ball/inclinometer box) | S | M | |
+| S2.11 | Heading indicator (DG card numerals, lubber line, digital heading box) | S | M | |
+| S2.12 | Vertical speed indicator (UP/DN, 5/10/15 scale, needle) and the elevator trim strip next to it | S | M | |
+| S2.13 | Tachometer (RPM, 5-35 scale, needle) | S | S | |
+| S2.14 | Throttle/flaps strip (F/L/D/T column left of COMPASS: markers and bar) | S | S | |
+| S2.15 | COMPASS box (magnetic heading digits) and OMI marker lights (O/M/I) | S | S | |
+| S2.16 | FUEL (two E-F gauges), OIL T and OIL P gauges | S | S | |
+| S2.17 | GEAR / LIGHTS / MAGS / CARB H status column (labels + switch symbols, drawn as clear states, not the game's symbol glyphs) | S | S | |
+| S2.18 | Radio stack: COM, NAV, TRANSPONDER, TIME boxes (labels, frames, digits in one font) | S | S | |
+| S2.19 | Panel frame: glareshield edge, instrument bezels between modules, separators, the small knobs; then the whole panel without any CGA pixels left | S | M | |
 
 ### Phase 3 — View
 | Id | Task | Model | Size | Status |

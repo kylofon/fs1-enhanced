@@ -43,6 +43,7 @@ typedef struct CockpitModule {
     const char *what;
     CockpitRect r;
     void (*draw)(const CockpitFrame *f, const struct CockpitModule *m); /* NULL: not done yet */
+    bool rest; /* the frame module: owns everything inside its rect that no other module's rect covers */
 } CockpitModule;
 
 /* --module-off NAME (comma separated, or "all"); --module-outline. */
@@ -57,6 +58,9 @@ bool cockpit_owns(float x, float line);
 void cockpit_add_text(int x, int line, uint8_t ch, uint8_t dim);
 void cockpit_add_needle(uint16_t desc, float hx, float hy, float tx, float ty);
 void cockpit_end(uint8_t *vram);
+
+/* True if (x, line) is inside the rect of an ordinary (non-rest) module, drawn or not. */
+bool cockpit_in_module(int x, int line);
 
 /* Called by sharp_view: draws the drawn modules (and outlines), if the panel was on this frame. */
 void cockpit_draw(SDL_Renderer *r);

@@ -88,3 +88,17 @@ right of the transponder/time boxes (x 565..636 x 171..197). S2.19 takes these.
 3. Draw everything inside the rect: face, bezel, ticks, numerals, labels, moving parts.
 4. Check: `--classic` cycle count unchanged; `--module-outline` and `--module-off xxx` for comparison;
    U1 check of that module.
+
+## State of the modules (S2.6-S2.19, 2026-10-06)
+
+All 16 modules and the frame are drawn. Per-module sources: `airspeed.c`, `attitude.c`, `altimeter.c`, `omi.c`, `turn.c`, `heading.c`,
+`vsi.c`, `tach.c` (with `strips.c` for the rudder track), `right.c` (throttle/flaps/trim strips, compass + O/M/I lights, fuel/oil gauges, status
+words, radio stack) and `frame.c` (the `rest` module: everything outside the other rects, traced from the clean image). Each file's header says which
+game variables it reads. Useful facts found on the way:
+
+- Gauge angles are 256 units per turn, 0 = up, clockwise (draw_needle / draw_needle2); the formulas are in the file headers.
+- The slider/lamp markers are `draw_indicator` descriptors (12 bytes from DS:1401: fuel L/R, oil T/P, ball 1431, aileron 143D, rudder 1449,
+  elevator 1455, throttle 1461, flaps 146D, trim 1479); +6 is the frame, +7 the drawn one.
+- The game's text records (`print_str`) are a header word (the video RAM offset) followed by the ASCII characters, zero terminated; the table
+  starts at DS:0799 (see `right.c` for the offsets).
+- The clean panel image (cseg:0) changes at run time inside the instrument areas; only the owned pixels outside the modules are stable.

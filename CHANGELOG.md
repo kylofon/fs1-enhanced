@@ -11,5 +11,7 @@
 - Altimeter (S2.8) redrawn as a vector module: scale, numerals, long and short hands from the game's altitude.
 - OMI/VOR indicator (S2.9) redrawn as a vector module: course needle, glide-slope bar, TO/FROM, marker lights, OBS numbers.
 - Turn coordinator, heading indicator (with a turning card), vertical speed indicator + elevator strip and tachometer (S2.10-S2.13) redrawn as vector modules.
+- Right-hand panel (S2.14-S2.18): flaps/trim/throttle strips, COMPASS with the O/M/I lights, FUEL/OIL gauges, GEAR/LIGHTS/MAGS/CARB H and the radio stack redrawn as vector modules.
+- Panel frame (S2.19): glareshield, separators, tracks and the aileron marker drawn from the clean panel image; no CGA pixels are left in the panel when all modules are on.
 - Sharp panel (S2.1): the airspeed, altimeter, VSI and tachometer needles are drawn as vector lines at window
   size; the pixel needle sprites are taken out of the picture (`--needle-width F`, `--dump-panel FILE`).

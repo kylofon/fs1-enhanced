@@ -38,6 +38,9 @@ void kit_needle(float hx, float hy, float tx, float ty, float w0, float w1, SDL_
 void kit_set_font(const uint8_t (*font)[8]);
 float kit_text(float x, float y, float h, float rot, int align, const char *s, SDL_FColor c);
 
+/* The same, with y the vertical middle of the caps (panel units) and no rotation. */
+float kit_text_mid(float x, float y, float h, int align, const char *s, SDL_FColor c);
+
 void kit_flush(SDL_Renderer *r);
 
 #endif

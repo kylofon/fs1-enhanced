@@ -212,6 +212,11 @@ float kit_text(float x, float y, float h, float rot, int align, const char *s, S
     return w_out;
 }
 
+float kit_text_mid(float x, float y, float h, int align, const char *s, SDL_FColor c)
+{
+    return kit_text(x, y - h * 0.5f / KIT_SY, h, 0, align, s, c);
+}
+
 void kit_flush(SDL_Renderer *r)
 {
     SDL_SetRenderClipRect(r, NULL);

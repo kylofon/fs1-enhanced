@@ -18,6 +18,7 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 | Task | What to do | For | Time |
 |---|---|---|---|
+| U1 | S2.14-S2.19 right panel and frame (throttle/flaps/trim strips, COMPASS + O M I lights, FUEL/OIL gauges, GEAR/LIGHTS/MAGS/CARB H, radio stack COM/NAV/TRANSPONDER/TIME, panel frame): close the game, `cmake --build build`, run next to `--classic` (`--module-off all` = old look, or by name, e.g. `--module-off frame`), take off, press G, L, H, A etc. and tune the radios: every value should show and change as in classic. Reply `OK` or what is wrong per part (missing/wrong text, sliders moving the wrong way, boxes, lines missing at the panel edges or between gauges) | S2.14-19 | 10 min |
 | U1 | S2.10-S2.13 bottom row (turn coordinator, heading indicator, VSI + elevator strip, tachometer): close the game, `cmake --build build`, run next to `--classic` (`--module-off turn,heading,vsi,tach` = old look), take off and fly: turn symbol tilts with the turn, ball moves; heading digits and the turning card; VSI needle, elevator marker, rudder marker/track at the bottom; tach needle. Reply `OK` or what is wrong per gauge (scale positions, directions, sizes, overlaps, anything missing) | S2.10-13 | 8 min |
 | U1 | S2.9 OMI/VOR indicator: close the game, `cmake --build build`, run next to `--classic` (`--module-off omi` = old look), tune a NAV station (or just fly): ring and card, course needle, glide-slope bar, OFF/TO/FROM, the O/M/I lights above, the two 3-digit numbers below (OBS course and reciprocal). Reply `OK` or what is wrong (needle/bar position and direction vs classic, flag text, light order/colours, number positions) | S2.9 | 5 min |
 | U1 | S2.8 altimeter: close the game, `cmake --build build`, run next to `--classic` (`--module-off altimeter` = old look), take off and climb: ring, 50 ticks, numerals 0-9, ALT, long hand (1000 ft/turn) and short thick hand (10000 ft/turn). Reply `OK` or what is wrong (hand angles vs classic, sizes, the small boxed label in the old dial that is NOT redrawn, see notes) | S2.8 | 3 min |
@@ -31,8 +32,8 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 ## Status
 
-- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending), S2.4 (U1 pending), S2.5, S2.6 (U1 pending), S2.7 (U1 pending), S2.8 (U1 pending), S2.9 (U1 pending), S2.10-S2.13 (U1 pending).
-- **Next:** the cockpit modules S2.14–S2.19 (Sonnet), one per session, in any order; `docs/PANEL.md` says how. Decisions D1–D4 below are binding.
+- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending), S2.4 (U1 pending), S2.5, S2.6 (U1 pending), S2.7 (U1 pending), S2.8 (U1 pending), S2.9 (U1 pending), S2.10-S2.19 (U1 pending).
+- **Next:** U1 checks of the cockpit modules (rows at the top); then Phase 3 (S3.2) and Phase 4.
 - Escalation rule: a subtask that fails twice on Sonnet → new Opus session with a 5-line note
   (symptom, file, what was tried). Never carry an old transcript over.
 
@@ -104,12 +105,12 @@ a time. Every module subtask: measure the layout from the clean panel (cseg:0122
 | S2.11 | Heading indicator (DG card numerals, lubber line, digital heading box) | S | M  done 2026-10-06, U1 pending |
 | S2.12 | Vertical speed indicator (UP/DN, 5/10/15 scale, needle) and the elevator trim strip next to it | S | M  done 2026-10-06, U1 pending |
 | S2.13 | Tachometer (RPM, 5-35 scale, needle) | S | S  done 2026-10-06, U1 pending |
-| S2.14 | Throttle/flaps strip (F/L/D/T column left of COMPASS: markers and bar) | S | S | |
-| S2.15 | COMPASS box (magnetic heading digits) (the O/M/I lights are in the OMI module, done in S2.9) | S | S | |
-| S2.16 | FUEL (two E-F gauges), OIL T and OIL P gauges | S | S | |
-| S2.17 | GEAR / LIGHTS / MAGS / CARB H status column (labels + switch symbols, drawn as clear states, not the game's symbol glyphs) | S | S | |
-| S2.18 | Radio stack: COM, NAV, TRANSPONDER, TIME boxes (labels, frames, digits in one font) | S | S | |
-| S2.19 | Panel frame: glareshield edge, instrument bezels between modules, separators, the small knobs; then the whole panel without any CGA pixels left | S | M | |
+| S2.14 | Throttle/flaps strip (F/L/D/T column left of COMPASS: markers and bar) | S | S |done 2026-10-06, U1 pending |
+| S2.15 | COMPASS box (magnetic heading digits) (the O/M/I lights are in the OMI module, done in S2.9) | S | S |done 2026-10-06, U1 pending |
+| S2.16 | FUEL (two E-F gauges), OIL T and OIL P gauges | S | S |done 2026-10-06, U1 pending |
+| S2.17 | GEAR / LIGHTS / MAGS / CARB H status column (labels + switch symbols, drawn as clear states, not the game's symbol glyphs) | S | S |done 2026-10-06, U1 pending |
+| S2.18 | Radio stack: COM, NAV, TRANSPONDER, TIME boxes (labels, frames, digits in one font) | S | S |done 2026-10-06, U1 pending |
+| S2.19 | Panel frame: glareshield edge, instrument bezels between modules, separators, the small knobs; then the whole panel without any CGA pixels left | S | M |done 2026-10-06, U1 pending |
 
 ### Phase 3 — View
 | Id | Task | Model | Size | Status |
@@ -227,6 +228,17 @@ Notes:
   draw_indicator descriptors (12 bytes, DS:1401..: ball 1431, aileron 143D, rudder 1449, elevator 1455, throttle 1461, flaps 146D, trim 1479; +6 = frame):
   elevator marker y = 187 - frame, rudder marker x = 176 + frame + 3.5 on the dotted track at line 199 (x 186..239). The aileron track/marker (line ~159-160, x 176..248)
   lies above the modules and is still CGA pixels (S2.19). Cycles identical to `--classic`.
+- S2.14-S2.18 (`right.{h,c}`): all values from the game state. Slider markers are draw_indicator descriptors (frame at +6): flaps 146D (y = 126 - f), trim 1479 (y = 153 - f),
+  throttle 1461 (y = 199 - f) at x ~435; FUEL/OIL bars 1401, 140D, 1419, 1425 (x = 528 or 584 + f, one pixel per frame). Texts are the ASCII records the game prints
+  (header word + characters): compass digits DS:079F, COM 07A5/07AB, NAV 07B0/07B6, transponder 07C7 (digits at every 2nd char), time 07D1/07D6/07DB. The O/M/I lights
+  are in the COMPASS box (DS:1A16 bit 0 outer .. 2 inner), not in the OMI gauge: the OMI gauge's top digits are the OBS course, the bottom ones its reciprocal (fixed in S2.9).
+  Status words: gear DS:057E (DN/UP), lights 0582 (ON/OFF), mags 0583 (OFF, L, R, BOTH, ST), carb heat 0577; the original prints panel-symbol words there,
+  ours is plain text (the original shows just a "B" for mags 3 at the start). The strip letters F, U, D, T and the labels were decoded from the clean panel by eye.
+- S2.19 (`frame.c`, module with `rest` = true): owns everything from line 106 down outside the other modules' rects. Built from the clean image whenever the owned pixels
+  change (the clean image also changes inside modules): runs of 12+ pixels (a gap of 1 allowed) become lines (dotted = grey), vertical runs of 8+, the rest crisp
+  pixel runs. Also draws the aileron marker (DS:143D, x = 176 + f + 3.5, track line 160). `cockpit_in_module` (bitmap) added to cockpit.c; blanking and ownership skip
+  the other modules' rects, so `--module-off NAME` still shows that module's old look inside the frame. Rows 0-105 of the clean image are a solid placeholder for the view: not touched.
+  Cycles identical to `--classic` (73093945 at frame 910).
 
 ## User tasks
 ### U1 — Visual checks (when an agent asks)

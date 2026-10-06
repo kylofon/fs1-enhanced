@@ -495,7 +495,7 @@ static bool font_load(const Pc *pc)
         if (!ok)
             continue;
         n_glyph = 0;
-        for (int ch = 0x21; ch < 0x80; ch++) {
+        for (int ch = 0x21; ch < 0x60; ch++) { /* the game's codes above that are symbols (panel switches), not the ROM font's letters */
             for (int m = 0; m < 2; m++) {
                 int cells = 0;
                 uint16_t *g = glyph_rows[n_glyph];
@@ -618,7 +618,7 @@ static void text_collect(const Pc *pc, uint8_t *vram, int detect_from)
 /* The labels (COMPASS, FUEL, TRANSPONDER, gauge numerals ...) are part of the panel bitmap, drawn in a small
  * 5-line font of dotted strokes (a lit pixel every other column), which the composite decode turns into
  * colour fringes. They are found in the clean panel image as small clusters of lit pixels (5 lines tall, at
- * most 13 wide), gaps of one pixel inside a stroke are bridged, and the cluster is drawn by the back end as
+ * most 24 wide), gaps of one pixel inside a stroke are bridged, and the cluster is drawn by the back end as
  * smoothed white strokes on the hi-res pixel grid. A cluster counts only while the video RAM still holds all
  * its pixels; those are then cleared in the CGA copy (whatever else is drawn there stays). Text only: the
  * gauge faces, scales and arcs are larger than that and stay in the CGA picture. */
@@ -673,7 +673,7 @@ static void label_scan(const uint8_t *clean, int first_line)
                     }
                 }
             }
-            if (maxy - miny != 4 || maxx - minx > 12 || nc > 2048 || n_lglyph >= LBL_MAX_GLYPH || n_lpix + nc + 16 > LBL_MAX_PIX)
+            if (maxy - miny != 4 || maxx - minx > 23 || nc > 2048 || n_lglyph >= LBL_MAX_GLYPH || n_lpix + nc + 16 > LBL_MAX_PIX)
                 continue;
             lglyph[n_lglyph++] = (uint16_t)n_lpix;
             for (int i = 0; i < nc; i++)

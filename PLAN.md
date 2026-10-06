@@ -158,6 +158,10 @@ Notes:
   `label_apply` (flight only) clears them from the CGA copy while the video RAM still holds all their pixels; the back end
   draws them on the hi-res pixel grid as smoothed white strokes (`draw_grid`). Cycles identical to `--classic` (73019456 at
   frame 910). Not done: the broken panel values from the first U1 row (S2.2 bug: `bc`, `f g`, `yyy`) -- separate fix.
+  Follow-up 2026-10-06 (after the first U1 look): the broken panel values (`bc`, `f g`, `l`, `yyy`) were game codes above 0x5F
+  (panel symbols) matched to the ROM font's lowercase letters; `font_load` now detects only 0x21-0x5F, the symbols keep the
+  smoothed-cell look. Label clusters may be up to 24 wide (merged letters). The first U1 screenshot still showed fringed
+  labels: rebuild first, then re-check.
 
 ## User tasks
 ### U1 — Visual checks (when an agent asks)

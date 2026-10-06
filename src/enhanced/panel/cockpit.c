@@ -85,11 +85,19 @@ void cockpit_begin(const Pc *pc, const uint8_t *clean)
             y++;
         raw[x] = y;
     }
-    for (int x = 0; x < 640; x++) { /* up to and including the frame line; dotted lines: the lowest of the neighbours */
+    static int solid[640];
+    for (int x = 0; x < 640; x++) { /* dotted lines (the glareshield curve): a missing dot takes the highest neighbour */
         int m = raw[x];
         for (int d = -1; d <= 1; d++)
-            if (x + d >= 0 && x + d < 640 && raw[x + d] > m)
+            if (x + d >= 0 && x + d < 640 && raw[x + d] < m)
                 m = raw[x + d];
+        solid[x] = m;
+    }
+    for (int x = 0; x < 640; x++) { /* up to and including the frame line: under a step, the lowest neighbour */
+        int m = solid[x];
+        for (int d = -1; d <= 1; d++)
+            if (x + d >= 0 && x + d < 640 && solid[x + d] > m)
+                m = solid[x + d];
         gap_y[x] = m + 1;
     }
 }

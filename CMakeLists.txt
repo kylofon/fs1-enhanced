@@ -42,7 +42,7 @@ endif()
 file(GLOB NATIVE_AREA_SOURCES CONFIGURE_DEPENDS src/natives/*.c)
 target_sources(fs1 PRIVATE ${NATIVE_AREA_SOURCES})
 # ENH: the enhancements (PLAN.md), hooked into the engine at ENH: points.
-file(GLOB ENHANCED_SOURCES CONFIGURE_DEPENDS src/enhanced/*.c)
+file(GLOB_RECURSE ENHANCED_SOURCES CONFIGURE_DEPENDS src/enhanced/*.c)
 target_sources(fs1 PRIVATE ${ENHANCED_SOURCES})
 target_compile_definitions(fs1 PRIVATE FS1_VERSION="${PROJECT_VERSION}")
 target_include_directories(fs1 PRIVATE src)

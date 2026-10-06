@@ -2,6 +2,7 @@
 #include "enhanced/enhanced.h"
 #include "enhanced/displaylist.h"
 #include "enhanced/sharp.h"
+#include "enhanced/panel/cockpit.h"
 
 #include <SDL3/SDL.h>
 
@@ -35,6 +36,14 @@ bool enh_parse_arg(int argc, char *argv[], int *i)
     }
     if (SDL_strcmp(argv[*i], "--needle-width") == 0 && *i + 1 < argc) {
         sharp_set_needle_scale((float)SDL_atof(argv[++*i]));
+        return true;
+    }
+    if (SDL_strcmp(argv[*i], "--module-off") == 0 && *i + 1 < argc) {
+        cockpit_set_off(argv[++*i]);
+        return true;
+    }
+    if (SDL_strcmp(argv[*i], "--module-outline") == 0) {
+        cockpit_set_outline(true);
         return true;
     }
     if (SDL_strcmp(argv[*i], "--line-width") == 0 && *i + 1 < argc) {

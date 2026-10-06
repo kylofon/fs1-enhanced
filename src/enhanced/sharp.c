@@ -1,6 +1,8 @@
 /* SDL back end of the sharp renderer, see sharp.h and docs/RENDER.md section 6. */
 #include "enhanced/sharp.h"
 #include "enhanced/displaylist.h"
+#include "enhanced/panel/cockpit.h"
+#include "enhanced/panel/kit.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -18,29 +20,8 @@ void sharp_set_line_width(float w) { line_width = w < 0 ? 0 : w; }
 
 /* ---- colour ------------------------------------------------------------------------------- */
 
-/* D1: a little more saturation than the composite decode gives, nothing more. */
-#define SATURATION 1.2f
-
-/* The colour a field of the pattern shows on the composite monitor: the pattern is n nibbles (one per
- * fat pixel, first = even x) repeated, decoded with the same NTSC window as the CGA picture and averaged. */
-static SDL_FColor pattern_colour(const uint8_t *nib, int n)
-{
-    int period = 4 * n;
-    float r = 0, g = 0, b = 0;
-    for (int x = 0; x < period; x++) {
-        int pattern = 0;
-        for (int k = -1; k <= 2; k++) {
-            int p = (x + k + period) % period;
-            pattern = pattern << 1 | (nib[p >> 2] >> (3 - (p & 3)) & 1);
-        }
-        uint32_t c = pc_composite_rgb(x & 3, pattern);
-        r += (float)(c >> 16 & 255), g += (float)(c >> 8 & 255), b += (float)(c & 255);
-    }
-    r /= (float)period * 255, g /= (float)period * 255, b /= (float)period * 255;
-    float l = 0.299f * r + 0.587f * g + 0.114f * b;
-    r = l + (r - l) * SATURATION, g = l + (g - l) * SATURATION, b = l + (b - l) * SATURATION;
-    return (SDL_FColor){ fminf(fmaxf(r, 0), 1), fminf(fmaxf(g, 0), 1), fminf(fmaxf(b, 0), 1), 1 };
-}
+/* The colour a field of the pattern shows on the composite monitor (kit.h). */
+static SDL_FColor pattern_colour(const uint8_t *nib, int n) { return kit_composite(nib, n); }
 
 static SDL_FColor col_pair(uint16_t w) /* nibble pair [30C8]: low byte odd x, high byte even x */
 {
@@ -547,7 +528,8 @@ static void text_detect(const Pc *pc, const uint8_t *real, int first_line)
             for (int g = 0; g < n_glyph; g++) {
                 const uint16_t *gr = glyph_rows[g];
                 if (gr[0] == row[0] && gr[1] == row[1] && gr[2] == row[2] && gr[3] == row[3] && gr[4] == row[4]) {
-                    if (n_hit < MAX_HIT) {
+                    cockpit_add_text(b * 8, line, glyph_ch[g], glyph_dim[g]);
+                    if (n_hit < MAX_HIT && !cockpit_owns((float)(b * 8), (float)line)) { /* a drawn module shows it itself */
                         TextHit *h = &hits[n_hit++];
                         h->x = b * 8, h->line = line, h->dim = glyph_dim[g];
                         memcpy(h->bm, pc->font[glyph_ch[g]], 8);
@@ -699,7 +681,7 @@ static void label_apply(const uint8_t *clean, uint8_t *vram, int first_line)
     memset(lbit, 0, sizeof lbit);
     n_lbit = 0;
     for (int g = 0; g < n_lglyph; g++) {
-        bool intact = true;
+        bool intact = !cockpit_owns(lpix[lglyph[g]].x, lpix[lglyph[g]].y); /* a drawn module shows it itself */
         for (int i = lglyph[g]; i < lglyph[g + 1] && intact; i++)
             if (lpix[i].real)
                 intact = (vram[(lpix[i].y & 1) * 0x2000 + (lpix[i].y >> 1) * 80 + (lpix[i].x >> 3)] >> (7 - (lpix[i].x & 7)) & 1) != 0;
@@ -825,6 +807,10 @@ void sharp_render_cga(const Pc *pc, uint32_t *px)
         return;
     }
     const uint8_t *clean = pc->mem + (cseg << 4);
+    const DlFrame *vf = dl_view(); /* in flight the 3D view occupies the top: no glyph look-alikes there */
+    bool flight = vf && !vf->incomplete;
+    if (flight)
+        cockpit_begin(pc, clean);
     static uint16_t done[8 * MAX_TOUCH];
     int n_done = 0;
     for (size_t k = 0; k < sizeof needle_defs / sizeof *needle_defs; k++) {
@@ -835,7 +821,9 @@ void sharp_render_cga(const Pc *pc, uint32_t *px)
             uint16_t table = pass == 0 ? needle_defs[k].table : (needle_defs[k].table == 0x961 ? 0x98F : 0x961);
             if (needle_bits(pc, vram, needle_defs[k].desc, table, &spr, &code, &hub_o) && needle_fit(&spr, hub_o, n)) {
                 n->desc = needle_defs[k].desc, n->code = code;
-                n_needles++;
+                cockpit_add_needle(n->desc, n->a.x, n->a.y / SY, n->b.x, n->b.y / SY);
+                if (!cockpit_owns(n->a.x, n->a.y / SY)) /* a drawn module shows it itself */
+                    n_needles++;
                 for (int i = 0; i < spr.n && n_done < 8 * MAX_TOUCH; i++) {
                     all[spr.touched[i]] |= spr.bits[spr.touched[i]];
                     done[n_done++] = spr.touched[i];
@@ -852,10 +840,11 @@ void sharp_render_cga(const Pc *pc, uint32_t *px)
         if (all[o])
             vram[o] = (uint8_t)((vram[o] & ~all[o]) | (clean[o] & all[o])), all[o] = 0;
     }
-    const DlFrame *vf = dl_view(); /* in flight the 3D view occupies the top: no glyph look-alikes there */
-    if (vf && !vf->incomplete)
+    if (flight)
         label_apply(clean, vram, 106);
-    text_collect(pc, vram, vf && !vf->incomplete ? 106 : 0);
+    text_collect(pc, vram, flight ? 106 : 0);
+    if (flight)
+        cockpit_end(vram); /* the drawn modules' rects out of the CGA picture */
     pc_render_cga_vram(pc, vram, px);
 }
 
@@ -930,5 +919,6 @@ bool sharp_view(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga)
     panel_draw(renderer);
     bool shown = view_draw(renderer, pc, cga);
     text_draw(renderer);
+    cockpit_draw(renderer);
     return shown;
 }

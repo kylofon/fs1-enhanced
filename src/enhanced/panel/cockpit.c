@@ -66,11 +66,35 @@ static bool active; /* the panel is on screen this frame */
 
 static bool drawn(int i) { return modules[i].draw && !off[i]; }
 
+static int gap_y[640];
+static bool gap_on;
+
 void cockpit_begin(const Pc *pc, const uint8_t *clean)
 {
     frame = (CockpitFrame){ pc, clean, texts, 0, needles, 0 };
     active = true;
+    gap_on = false;
+    for (int i = 0; i < N_MODULES; i++)
+        gap_on = gap_on || (modules[i].rest && drawn(i));
+    if (!gap_on)
+        return;
+    static int raw[640];
+    for (int x = 0; x < 640; x++) { /* the first lit line of the clean panel from line 106 down (at most 125) */
+        int y = 106;
+        while (y < 125 && !(clean[(y & 1) * 0x2000 + (y >> 1) * 80 + (x >> 3)] >> (7 - (x & 7)) & 1))
+            y++;
+        raw[x] = y;
+    }
+    for (int x = 0; x < 640; x++) { /* dotted lines: the smallest of the neighbours */
+        int m = raw[x];
+        for (int d = -2; d <= 2; d++)
+            if (x + d >= 0 && x + d < 640 && raw[x + d] < m)
+                m = raw[x + d];
+        gap_y[x] = m;
+    }
 }
+
+int cockpit_gap_bottom(int x) { return active && gap_on && x >= 0 && x < 640 ? gap_y[x] : -1; }
 
 bool cockpit_in_module(int x, int line)
 {

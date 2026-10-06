@@ -62,6 +62,10 @@ void cockpit_end(uint8_t *vram);
 /* True if (x, line) is inside the rect of an ordinary (non-rest) module, drawn or not. */
 bool cockpit_in_module(int x, int line);
 
+/* The first line of the panel's frame in column x of the panel (the sky and ground may be drawn from the view's bottom to
+ * there: the strip under the view and the corner above the glareshield curve), or -1 when the frame module is not drawn. */
+int cockpit_gap_bottom(int x);
+
 /* Called by sharp_view: draws the drawn modules (and outlines), if the panel was on this frame. */
 void cockpit_draw(SDL_Renderer *r);
 

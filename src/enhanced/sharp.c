@@ -121,9 +121,9 @@ static void line(DlPt p, DlPt q, SDL_FColor col)
 static void dot(DlPt p, SDL_FColor col) { fill_rect(p.x - 0.5f, p.y - 0.5f, 1, 1, col); }
 
 /* Convex polygon of the view rectangle on one side of the line a->b (side < 0: f <= 0, > 0: f >= 0). */
-static void sky_half(DlPt a, DlPt b, int side, SDL_FColor col)
+static void sky_half(DlPt a, DlPt b, int side, SDL_FColor col, float x0, float y0, float x1, float y1)
 {
-    DlPt in[8] = { { 0, 0 }, { VIEW_W, 0 }, { VIEW_W, VIEW_H }, { 0, VIEW_H } }, out[8];
+    DlPt in[8] = { { x0, y0 }, { x1, y0 }, { x1, y1 }, { x0, y1 } }, out[8];
     int n = 4, m = 0;
     for (int i = 0; i < n; i++) {
         DlPt p = in[i], q = in[(i + 1) % n];
@@ -140,16 +140,19 @@ static void sky_half(DlPt a, DlPt b, int side, SDL_FColor col)
         tri(out[0], out[i], out[i + 1], col);
 }
 
-static void sky(const DlItem *it)
+/* The sky/ground split inside a rectangle (view units); the line is extended beyond the view. */
+static void sky_rect(const DlItem *it, float x0, float y0, float x1, float y1)
 {
     DlPt a = it->u.sky.a, b = it->u.sky.b;
     if (fabsf(a.x - b.x) < 1e-4f && fabsf(a.y - b.y) < 1e-4f) {
-        fill_rect(0, 0, VIEW_W, VIEW_H, col_word(it->u.sky.pat_l));
+        fill_rect(x0, y0, x1 - x0, y1 - y0, col_word(it->u.sky.pat_l));
         return;
     }
-    sky_half(a, b, 1, col_word(it->u.sky.pat_l));  /* f <= 0: left of a->b */
-    sky_half(a, b, -1, col_word(it->u.sky.pat_r)); /* f >= 0 */
+    sky_half(a, b, 1, col_word(it->u.sky.pat_l), x0, y0, x1, y1);  /* f <= 0: left of a->b */
+    sky_half(a, b, -1, col_word(it->u.sky.pat_r), x0, y0, x1, y1); /* f >= 0 */
 }
+
+static void sky(const DlItem *it) { sky_rect(it, 0, 0, VIEW_W, VIEW_H); }
 
 static float cross3(DlPt a, DlPt b, DlPt c) { return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x); }
 
@@ -787,6 +790,15 @@ static void text_draw(SDL_Renderer *r)
 }
 
 
+/* The panel is in the video RAM when its two vertical lines at x 425 and 427 are there from line 120 down. */
+static bool panel_in_vram(const uint8_t *v)
+{
+    int a = 0, b = 0;
+    for (int y = 120; y < 199; y++)
+        a += v[(y & 1) * 0x2000 + (y >> 1) * 80 + 53] >> 6 & 1, b += v[(y & 1) * 0x2000 + (y >> 1) * 80 + 53] >> 4 & 1;
+    return a >= 70 && b >= 70;
+}
+
 void sharp_render_cga(const Pc *pc, uint32_t *px)
 {
     static uint8_t vram[VRAM_SIZE];
@@ -809,8 +821,17 @@ void sharp_render_cga(const Pc *pc, uint32_t *px)
     const uint8_t *clean = pc->mem + (cseg << 4);
     const DlFrame *vf = dl_view(); /* in flight the 3D view occupies the top: no glyph look-alikes there */
     bool flight = vf && !vf->incomplete;
-    if (flight)
-        cockpit_begin(pc, clean);
+    /* the start-up menus also show the panel (no view): the cockpit modules replace it there too; the panel as the
+     * game just drew it serves as the image the frame is traced from (outside the modules it is static art) */
+    static uint8_t snap[VRAM_SIZE];
+    bool menu_panel = false;
+    if (!flight && panel_in_vram(vram)) {
+        memcpy(snap, vram, VRAM_SIZE);
+        menu_panel = true;
+    }
+    bool cockpit = flight || menu_panel;
+    if (cockpit)
+        cockpit_begin(pc, flight ? clean : snap);
     static uint16_t done[8 * MAX_TOUCH];
     int n_done = 0;
     for (size_t k = 0; k < sizeof needle_defs / sizeof *needle_defs; k++) {
@@ -843,7 +864,7 @@ void sharp_render_cga(const Pc *pc, uint32_t *px)
     if (flight)
         label_apply(clean, vram, 106);
     text_collect(pc, vram, flight ? 106 : 0);
-    if (flight)
+    if (cockpit)
         cockpit_end(vram); /* the drawn modules' rects out of the CGA picture */
     pc_render_cga_vram(pc, vram, px);
 }
@@ -909,6 +930,23 @@ static bool view_draw(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga)
     }
 
     flush(renderer);
+    /* S2.19: with the panel frame drawn as vectors, the sky and ground go on behind the cockpit's top edge (the black
+     * strip under the view and the corner above the glareshield curve); scenery itself is clipped at the view. */
+    const DlItem *sg = NULL;
+    for (int i = 0; i < f->n_items && !sg; i++)
+        if (f->items[i].kind == DL_SKYGROUND)
+            sg = &f->items[i];
+    if (sg && cockpit_gap_bottom(0) >= 0) {
+        for (int x = 0; x < 640;) {
+            int yb = cockpit_gap_bottom(x), e = x + 1;
+            while (e < 640 && cockpit_gap_bottom(e) == yb)
+                e++;
+            if (yb > view_y0 + VIEW_H)
+                sky_rect(sg, (float)x / 4.0f, (float)VIEW_H, (float)e / 4.0f, (float)(yb - view_y0));
+            x = e;
+        }
+        flush_clip(renderer, NULL);
+    }
     SDL_SetRenderClipRect(renderer, NULL);
     fallback_tiles(renderer, pc, cga, dl_view_snap(), view_y0);
     return true;

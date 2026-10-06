@@ -18,6 +18,7 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 | Task | What to do | For | Time |
 |---|---|---|---|
+| U1 | Cockpit follow-ups: (1) in flight the sky and ground now continue behind the cockpit's top edge (the black strip under the view and the top-left corner above the glareshield curve; scenery objects are still clipped at the old view border); (2) the start-up menu screen shows the vector cockpit too. Rebuild, run next to `--classic`: look at the top-left corner of the panel in flight (horizon line crossing the gap, colours matching) and at the menu screens (A, B). Reply `OK` or what is wrong | follow-up | 3 min |
 | U1 | S2.14-S2.19 right panel and frame (throttle/flaps/trim strips, COMPASS + O M I lights, FUEL/OIL gauges, GEAR/LIGHTS/MAGS/CARB H, radio stack COM/NAV/TRANSPONDER/TIME, panel frame): close the game, `cmake --build build`, run next to `--classic` (`--module-off all` = old look, or by name, e.g. `--module-off frame`), take off, press G, L, H, A etc. and tune the radios: every value should show and change as in classic. Reply `OK` or what is wrong per part (missing/wrong text, sliders moving the wrong way, boxes, lines missing at the panel edges or between gauges) | S2.14-19 | 10 min |
 | U1 | S2.10-S2.13 bottom row (turn coordinator, heading indicator, VSI + elevator strip, tachometer): close the game, `cmake --build build`, run next to `--classic` (`--module-off turn,heading,vsi,tach` = old look), take off and fly: turn symbol tilts with the turn, ball moves; heading digits and the turning card; VSI needle, elevator marker, rudder marker/track at the bottom; tach needle. Reply `OK` or what is wrong per gauge (scale positions, directions, sizes, overlaps, anything missing) | S2.10-13 | 8 min |
 | U1 | S2.9 OMI/VOR indicator: close the game, `cmake --build build`, run next to `--classic` (`--module-off omi` = old look), tune a NAV station (or just fly): ring and card, course needle, glide-slope bar, OFF/TO/FROM, the OBS course (3 digits above the card) and its reciprocal (below); the O/M/I lights are now in the COMPASS box. Reply `OK` or what is wrong (needle/bar position and direction vs classic, flag text, number positions) | S2.9 | 5 min |
@@ -239,6 +240,11 @@ Notes:
   pixel runs. Also draws the aileron marker (DS:143D, x = 176 + f + 3.5, track line 160). `cockpit_in_module` (bitmap) added to cockpit.c; blanking and ownership skip
   the other modules' rects, so `--module-off NAME` still shows that module's old look inside the frame. Rows 0-105 of the clean image are a solid placeholder for the view: not touched.
   Cycles identical to `--classic` (73093945 at frame 910).
+- Follow-ups after the first panel look (2026-10-06): (a) `sharp_render_cga` also treats the start-up menu screens as panel screens: the panel is recognised by its two vertical lines
+  (x 425/427) in the video RAM, a snapshot of the video RAM then serves as the image the frame module traces (the clean image at cseg:0 is not loaded yet in the menus); (b) the
+  S2.2 smoothed text cells skip owned areas (the old status symbols no longer show under the new words); (c) `cockpit_gap_bottom(x)` (first frame line of the panel in column x,
+  from the clean image, smallest of x+-2) lets `view_draw` continue the sky/ground fill below the view border down to the frame: `sky_rect` = the old split with a rectangle.
+  Only fills continue (the engine clips the scenery lines and polygons at the view border; showing more of the world there would need a taller projection = engine change).
 
 ## User tasks
 ### U1 — Visual checks (when an agent asks)

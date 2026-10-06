@@ -18,13 +18,15 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 | Task | What to do | For | Time |
 |---|---|---|---|
-| U1 | S2.2 sharp text: close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` next to `--classic` and look at the start-up menus, the flight status/radio text and the editor screens: the letters should be smooth at any window size, same colour and place as classic. Reply `OK` or what is wrong (blurry/missing letters, leftover pixel letters, wrong colour, text that does not vanish when the game erases it) | S2.2 | 5 min |
+| U1 | S2.4 sharp panel labels: close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` next to `--classic`, take off (A, B at the menus) and look at the panel labels (COMPASS, FUEL, OIL, COM, NAV, TRANSPONDER, TIME, KNOTS, GEAR/LIGHTS/MAGS/CARB, gauge numerals): they should be crisp white strokes, same letters and place as classic, no leftover coloured dots. Reply `OK` or what is wrong (missing/odd letters, too thin, colour) | S2.4 | 3 min |
+| U1 | S1.3 + S2.2 result 2026-10-06: menus and 3D graphics OK. Cockpit: values sharp, labels not (= S2.4), some values broken (right-hand panel column GEAR/LIGHTS/MAGS/CARB shows `bc`, `f g`, `l`; `yyy` under OMI; check heading `330`). Next session: fix broken values (S2.2 bug), then S2.4. Send a `--classic` screenshot of the same frame if the broken values differ from it | S2.2 | 3 min |
+| U1 | S2.2 sharp text (re-check after the fix): close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` next to `--classic` and look at the start-up menus, the flight status/radio text and the editor screens: the letters should be smooth at any window size, same colour and place as classic. Reply `OK` or what is wrong (blurry/missing letters, leftover pixel letters, wrong colour, text that does not vanish when the game erases it) | S2.2 | 5 min |
 | U1 | S2.1 sharp panel needles: close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` next to `--classic`, take off (A, B at the menus, F2 for throttle) and watch the airspeed, altimeter (both hands), VSI and tachometer needles; or open `work\sharp_p.bmp` vs `work\classic_p.bmp` (frame 900 on the runway). Reply `OK` or what is wrong (needle position/length, thickness: `--needle-width F`, colour, flicker, leftover pixel needles) | S2.1 | 5 min |
 | U1 | S1.3 sharp 3D view: close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` (sharp is the default) next to `--classic`, fly (A, B at the menus) and compare the 3D view; or open `work\sharp_650.bmp` vs `work\classic_650.bmp`. Reply `OK` or what is wrong and where (colours, line thickness `--line-width N`, runway/ground fills, blurry patches) | S1.3 | 5 min |
 
 ## Status
 
-- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending).
+- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending), S2.4 (U1 pending).
 - **Next:** U1 checks of S1.3, S2.1 and S2.2, then S2.3 (artificial horizon). Decisions D1–D4 below are binding.
 - Escalation rule: a subtask that fails twice on Sonnet → new Opus session with a 5-line note
   (symptom, file, what was tried). Never carry an old transcript over.
@@ -75,7 +77,7 @@ window size. The CGA path stays as the authentic mode (`--classic`, or toggled i
 | S2.1 | Instrument panel at high resolution: needles as lines/polygons, indicators and sprites upscaled or vector-traced from the original sprite data; **U1 check** | S | L | done 2026-10-04, U1 pending |
 | S2.2 | Text at high resolution: the 16×5 game font rendered as scalable glyphs (vector from the font bits), panel and menu text; editor text mode with a sharp font | S | M | done 2026-10-04, U1 pending |
 | S2.3 | Artificial horizon at high resolution (`gauges.c` `attitude`: row records DS:1BAB, spans 293F, bank dots 5B88/2A3E): sub-pixel horizon line between the sky and ground colours, bank pointer; read the state like S2.1 (section 6b), verify against the video RAM; **U1 check** | S | M | |
-| S2.4 | Panel labels (COMPASS, FUEL, OIL, COM, NAV, TRANSPONDER, TIME, KNOTS, gauge numerals, GEAR/LIGHTS/MAGS/CARB) at high resolution, like S2.2: they are part of the panel bitmap (not the game font), so find them in the clean panel image (segment at 0000:0122) or from the panel art data, identify each character (own small glyph set of the panel font, or trace), redraw crisp in white/their colour with the 8x8-style font, remove the pixel/fringe version from the CGA copy; text only, gauge faces and scales stay | S | M | |
+| S2.4 | Panel labels (COMPASS, FUEL, OIL, COM, NAV, TRANSPONDER, TIME, KNOTS, gauge numerals, GEAR/LIGHTS/MAGS/CARB) at high resolution, like S2.2: they are part of the panel bitmap (not the game font), so find them in the clean panel image (segment at 0000:0122) or from the panel art data, identify each character (own small glyph set of the panel font, or trace), redraw crisp in white/their colour with the 8x8-style font, remove the pixel/fringe version from the CGA copy; text only, gauge faces and scales stay | S | M | done 2026-10-06, U1 pending |
 
 ### Phase 3 — View
 | Id | Task | Model | Size | Status |
@@ -150,6 +152,12 @@ Notes:
   white (grey when dim), one rectangle per lit run; unclaimed rows (shifted text, panel art) keep the smoothed cells
   (strokes on the hi-res pixel grid, no composite colour fringes). Details in `docs/RENDER.md`. U1 should judge this
   version: the letters now look like the 8x8 font, not the game's thin 16x5 shapes (a deliberate change).
+- S2.4: panel labels are not the game font (a 5-line dotted-stroke font baked into the panel bitmap), so they are traced, not
+  identified: `label_scan` (`sharp.c`) finds clusters of lit pixels 5 lines tall and <=13 wide in the clean panel (cseg:0122,
+  rescanned when its hash changes; 131 clusters / 2115 pixels in the stock panel), bridges 1-pixel gaps in a stroke, and
+  `label_apply` (flight only) clears them from the CGA copy while the video RAM still holds all their pixels; the back end
+  draws them on the hi-res pixel grid as smoothed white strokes (`draw_grid`). Cycles identical to `--classic` (73019456 at
+  frame 910). Not done: the broken panel values from the first U1 row (S2.2 bug: `bc`, `f g`, `yyy`) -- separate fix.
 
 ## User tasks
 ### U1 — Visual checks (when an agent asks)

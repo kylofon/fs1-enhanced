@@ -612,6 +612,109 @@ static void text_collect(const Pc *pc, uint8_t *vram, int detect_from)
     }
 }
 
+
+/* ---- panel labels (S2.4) ------------------------------------------------------------------- */
+
+/* The labels (COMPASS, FUEL, TRANSPONDER, gauge numerals ...) are part of the panel bitmap, drawn in a small
+ * 5-line font of dotted strokes (a lit pixel every other column), which the composite decode turns into
+ * colour fringes. They are found in the clean panel image as small clusters of lit pixels (5 lines tall, at
+ * most 13 wide), gaps of one pixel inside a stroke are bridged, and the cluster is drawn by the back end as
+ * smoothed white strokes on the hi-res pixel grid. A cluster counts only while the video RAM still holds all
+ * its pixels; those are then cleared in the CGA copy (whatever else is drawn there stays). Text only: the
+ * gauge faces, scales and arcs are larger than that and stay in the CGA picture. */
+
+#define LBL_W 640
+#define LBL_MAX_PIX 16384
+#define LBL_MAX_GLYPH 1024
+typedef struct LPix {
+    uint16_t x;
+    uint8_t y, real; /* real: lit in the clean panel; else a bridged gap */
+} LPix;
+static LPix lpix[LBL_MAX_PIX];
+static uint16_t lglyph[LBL_MAX_GLYPH + 1]; /* first pixel of each glyph; one more as the end */
+static int n_lglyph, n_lpix;
+static uint32_t lbl_hash;
+static uint8_t lbit[LBL_W * TCELL_H]; /* the strokes to draw: 15 = lit hi-res pixel */
+static int n_lbit;
+
+static int clean_lit(const uint8_t *clean, int x, int y)
+{
+    return clean[(y & 1) * 0x2000 + (y >> 1) * 80 + (x >> 3)] >> (7 - (x & 7)) & 1;
+}
+
+static void label_scan(const uint8_t *clean, int first_line)
+{
+    static uint8_t seen[LBL_W * TCELL_H];
+    static uint32_t stack[LBL_W * TCELL_H];
+    static LPix comp[2048];
+    n_lglyph = n_lpix = 0;
+    memset(seen, 0, sizeof seen);
+    for (int y0 = first_line; y0 < TCELL_H; y0++) {
+        for (int x0 = 0; x0 < LBL_W; x0++) {
+            if (seen[y0 * LBL_W + x0] || !clean_lit(clean, x0, y0))
+                continue;
+            int sp = 0, nc = 0, minx = x0, maxx = x0, miny = y0, maxy = y0;
+            stack[sp++] = (uint32_t)(y0 * LBL_W + x0);
+            seen[y0 * LBL_W + x0] = 1;
+            while (sp) {
+                int cy = (int)(stack[--sp] / LBL_W), cx = (int)(stack[sp] % LBL_W);
+                if (nc < 2048)
+                    comp[nc] = (LPix){ (uint16_t)cx, (uint8_t)cy, 1 };
+                nc++;
+                minx = cx < minx ? cx : minx, maxx = cx > maxx ? cx : maxx;
+                miny = cy < miny ? cy : miny, maxy = cy > maxy ? cy : maxy;
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dx = -2; dx <= 2; dx++) {
+                        int ny = cy + dy, nx = cx + dx;
+                        if (ny < first_line || ny >= TCELL_H || nx < 0 || nx >= LBL_W || seen[ny * LBL_W + nx] || !clean_lit(clean, nx, ny))
+                            continue;
+                        seen[ny * LBL_W + nx] = 1;
+                        stack[sp++] = (uint32_t)(ny * LBL_W + nx);
+                    }
+                }
+            }
+            if (maxy - miny != 4 || maxx - minx > 12 || nc > 2048 || n_lglyph >= LBL_MAX_GLYPH || n_lpix + nc + 16 > LBL_MAX_PIX)
+                continue;
+            lglyph[n_lglyph++] = (uint16_t)n_lpix;
+            for (int i = 0; i < nc; i++)
+                lpix[n_lpix++] = comp[i];
+            for (int y = miny; y <= maxy; y++) /* a stroke drawn as every other pixel becomes solid */
+                for (int x = minx; x + 2 <= maxx; x++)
+                    if (clean_lit(clean, x, y) && !clean_lit(clean, x + 1, y) && clean_lit(clean, x + 2, y))
+                        lpix[n_lpix++] = (LPix){ (uint16_t)(x + 1), (uint8_t)y, 0 };
+        }
+    }
+    lglyph[n_lglyph] = (uint16_t)n_lpix;
+}
+
+static void label_apply(const uint8_t *clean, uint8_t *vram, int first_line)
+{
+    uint32_t h = 2166136261u;
+    for (int i = 0; i < VRAM_SIZE; i++)
+        h = (h ^ clean[i]) * 16777619u;
+    if (h != lbl_hash || !n_lglyph) {
+        label_scan(clean, first_line);
+        lbl_hash = h;
+    }
+    memset(lbit, 0, sizeof lbit);
+    n_lbit = 0;
+    for (int g = 0; g < n_lglyph; g++) {
+        bool intact = true;
+        for (int i = lglyph[g]; i < lglyph[g + 1] && intact; i++)
+            if (lpix[i].real)
+                intact = (vram[(lpix[i].y & 1) * 0x2000 + (lpix[i].y >> 1) * 80 + (lpix[i].x >> 3)] >> (7 - (lpix[i].x & 7)) & 1) != 0;
+        if (!intact)
+            continue;
+        for (int i = lglyph[g]; i < lglyph[g + 1]; i++) {
+            const LPix *p = &lpix[i];
+            lbit[p->y * LBL_W + p->x] = 15;
+            n_lbit++;
+            if (p->real)
+                vram[(p->y & 1) * 0x2000 + (p->y >> 1) * 80 + (p->x >> 3)] &= (uint8_t)~(0x80 >> (p->x & 7));
+        }
+    }
+}
+
 static const uint8_t *g_cells;
 static int g_w;
 static int cell_on(int x, int y) { return x >= 0 && y >= 0 && x < g_w && y < TCELL_H && g_cells[y * g_w + x]; }
@@ -666,7 +769,7 @@ static void draw_grid(const uint8_t *g, int gw, float cw, const SDL_FColor *ncol
 
 static void text_draw(SDL_Renderer *r)
 {
-    if (!n_tcell && !n_hit)
+    if (!n_tcell && !n_hit && !n_lbit)
         return;
     static SDL_FColor ncol[16];
     static bool ncol_ready;
@@ -678,6 +781,8 @@ static void text_draw(SDL_Renderer *r)
     n_verts = n_idx = n_hair = 0;
     draw_grid(tcell, TCELL_W, 4.0f, ncol);
     draw_grid(tbit, 4 * TCELL_W, 1.0f, ncol); /* strokes: lit hi-res pixels in the colour of a full nibble */
+    if (n_lbit)
+        draw_grid(lbit, LBL_W, 1.0f, ncol); /* panel labels */
     for (int i = 0; i < n_hit; i++) { /* the 8x8 font: each run of lit pixels one rectangle, 2 x 1.7 output pixels per pixel */
         const TextHit *h = &hits[i];
         SDL_FColor col = ncol[h->dim ? 8 : 15];
@@ -708,7 +813,7 @@ void sharp_render_cga(const Pc *pc, uint32_t *px)
     n_needles = 0;
     panel_frame++;
     uint32_t cseg = m16(pc, 0x122);
-    n_tcell = n_hit = 0;
+    n_tcell = n_hit = n_lbit = 0;
     if (!pc->composite || (pc->cga_mode & 0x1E) != 0x1A) {
         pc_render_cga(pc, px);
         return;
@@ -748,6 +853,8 @@ void sharp_render_cga(const Pc *pc, uint32_t *px)
             vram[o] = (uint8_t)((vram[o] & ~all[o]) | (clean[o] & all[o])), all[o] = 0;
     }
     const DlFrame *vf = dl_view(); /* in flight the 3D view occupies the top: no glyph look-alikes there */
+    if (vf && !vf->incomplete)
+        label_apply(clean, vram, 106);
     text_collect(pc, vram, vf && !vf->incomplete ? 106 : 0);
     pc_render_cga_vram(pc, vram, px);
 }

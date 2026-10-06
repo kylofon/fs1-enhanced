@@ -22,13 +22,16 @@
 
 static void circle_fill(float x, float y, float r, SDL_FColor c) { kit_fill_ellipse(x, y, r, r / KIT_SY, c); }
 
-static void lamp(float x, char letter, bool on, SDL_FColor lit)
+/* The lamps sit on an arc between the card (radius 34, line 1.5 wide) and the bezel (inner edge at 49): radius 41.9
+ * from the centre, lamp 5 plus a 0.7 outline, so each clears both circles by about 1.4 output pixels. */
+static void lamp(float dx, char letter, bool on, SDL_FColor lit)
 {
-    const float y = 117.5f + 3.0f / KIT_SY, r = 5.5f; /* 3 output pixels lower than the first version */
-    kit_fill_ellipse(x, y, r + 0.8f, (r + 0.8f) / KIT_SY, kit_grey);
+    const float d = 41.9f, r = 5.0f;
+    float x = CX + dx, y = CY - sqrtf(d * d - dx * dx) / KIT_SY;
+    kit_fill_ellipse(x, y, r + 0.7f, (r + 0.7f) / KIT_SY, kit_grey);
     circle_fill(x, y, r, on ? lit : kit_face);
     char s[2] = { letter, 0 };
-    kit_text(x, y - 3.0f / KIT_SY, 6.0f, 0, 1, s, on ? kit_black : kit_grey);
+    kit_text(x, y - 2.8f / KIT_SY, 5.6f, 0, 1, s, on ? kit_black : kit_grey);
 }
 
 void omi_draw(const CockpitFrame *f, const CockpitModule *m)
@@ -67,9 +70,9 @@ void omi_draw(const CockpitFrame *f, const CockpitModule *m)
     kit_text(CX - 12.0f, 142.0f, 6.8f, 0, 1, txt, fc);
 
     /* marker beacon lights: outer (blue), middle (amber), inner (white) */
-    lamp(CX - 16.0f, 'O', mk & 1, (SDL_FColor){ 0.25f, 0.5f, 1, 1 });
-    lamp(CX, 'M', mk & 2, (SDL_FColor){ 1, 0.7f, 0.1f, 1 });
-    lamp(CX + 16.0f, 'I', mk & 4, kit_white);
+    lamp(-16.0f, 'O', mk & 1, (SDL_FColor){ 0.25f, 0.5f, 1, 1 });
+    lamp(0.0f, 'M', mk & 2, (SDL_FColor){ 1, 0.7f, 0.1f, 1 });
+    lamp(16.0f, 'I', mk & 4, kit_white);
 
     /* OBS course and its reciprocal (ASCII digits in the readout record) */
     for (int k = 0; k < 2; k++) {

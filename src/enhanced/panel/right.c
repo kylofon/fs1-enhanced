@@ -66,8 +66,8 @@ void throttle_draw(const CockpitFrame *f, const CockpitModule *m)
 
 static void lamp(float x, float y, bool on, SDL_FColor lit)
 {
-    kit_fill_ellipse(x, y, 6.0f, 6.0f / KIT_SY, kit_grey);
-    kit_fill_ellipse(x, y, 5.0f, 5.0f / KIT_SY, on ? lit : kit_face);
+    kit_fill_ellipse(x, y, 5.0f, 5.0f / KIT_SY, kit_grey); /* 16 px pitch: a clear gap between the lamps */
+    kit_fill_ellipse(x, y, 4.2f, 4.2f / KIT_SY, on ? lit : kit_face);
 }
 
 void compass_draw(const CockpitFrame *f, const CockpitModule *m)
@@ -94,7 +94,7 @@ void compass_draw(const CockpitFrame *f, const CockpitModule *m)
     const SDL_FColor lit[3] = { { 0.25f, 0.5f, 1, 1 }, { 1, 0.7f, 0.1f, 1 }, kit_white };
     for (int i = 0; i < 3; i++) {
         float x = 462.5f + 16.0f * (float)i;
-        kit_text_mid(x, 128.5f, 8.5f, 1, letter[i], kit_grey);
+        kit_text_mid(x, 128.5f, 9.0f, 1, letter[i], kit_white);
         lamp(x, 136.5f, mk >> i & 1, lit[i]);
     }
 }

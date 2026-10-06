@@ -51,16 +51,16 @@ void heading_draw(const CockpitFrame *f, const CockpitModule *m)
     }
     static const char *const lab[12] = { "N", "3", "6", "E", "12", "15", "S", "21", "24", "W", "30", "33" };
     for (int k = 0; k < 12; k++)
-        card_text((float)(k * 30 - hdg), 0.72f, 6.5f, lab[k], k % 3 == 0 ? kit_white : kit_grey);
+        card_text((float)(k * 30 - hdg), 0.73f, 5.6f, lab[k], k % 3 == 0 ? kit_white : kit_grey);
 
     /* digital readout and the fixed lubber mark */
-    kit_text(CX, 169.6f, 6.8f, 0, 1, digits, kit_white);
+    kit_text_mid(CX, 173.3f, 6.4f, 1, digits, kit_white); /* below the numerals' ring, above the fin */
     float tri[6] = { CX, 164.6f, CX - 3.5f, 163.3f, CX + 3.5f, 163.3f };
     kit_fill_poly(tri, 3, kit_white);
 
     /* aircraft symbol: wing, fuselage, tail */
     kit_line(CX - 11.5f, 178.5f, CX + 11.5f, 178.5f, 2.4f, kit_white);
-    kit_line(CX, 175.0f, CX, 183.5f, 2.4f, kit_white);
+    kit_line(CX, 175.8f, CX, 183.5f, 2.4f, kit_white);
     kit_line(CX - 5.0f, 182.5f, CX + 5.0f, 182.5f, 2.0f, kit_white);
 
     kit_ellipse(CX, CY, RX - 0.5f, RY - 0.5f / KIT_SY, 3.0f, kit_bezel);

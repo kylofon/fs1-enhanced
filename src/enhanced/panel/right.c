@@ -138,7 +138,7 @@ void status_draw(const CockpitFrame *f, const CockpitModule *m)
     for (int i = 0; i < 4; i++) {
         float y = 146.5f + 6.0f * (float)i;
         kit_text_mid(546.0f, y, 9.0f, 0, label[i], kit_white);
-        kit_text_mid(608.0f, y, 9.0f, 0, value[i], kit_white);
+        kit_text_mid(634.0f, y, 8.0f, 2, value[i], kit_white); /* right-aligned: BOTH must stay left of the frame at x 637 */
     }
 }
 

@@ -577,8 +577,8 @@ static void text_collect(const Pc *pc, uint8_t *vram, int detect_from)
     for (int k = 0; k < n_used; k++) {
         for (int i = 0; i < 2; i++) {
             int a = used[k] + i, within = a & 0x1FFF, line = within / 80 * 2 + (a >> 13), col = within % 80;
-            if (within >= 8000 || line >= TCELL_H || claimed[a])
-                continue;
+            if (within >= 8000 || line >= TCELL_H || claimed[a] || cockpit_owns((float)(col * 8), (float)line))
+                continue; /* (a drawn module shows its texts itself) */
             for (int k = 0; k < 2; k++) {
                 int nib = k ? real[a] & 15 : real[a] >> 4, bits = __builtin_popcount(nib);
                 if (bits == 1)

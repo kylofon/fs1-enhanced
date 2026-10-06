@@ -664,7 +664,7 @@ static void label_scan(const uint8_t *clean, int first_line)
                 minx = cx < minx ? cx : minx, maxx = cx > maxx ? cx : maxx;
                 miny = cy < miny ? cy : miny, maxy = cy > maxy ? cy : maxy;
                 for (int dy = -1; dy <= 1; dy++) {
-                    for (int dx = -2; dx <= 2; dx++) {
+                    for (int dx = -3; dx <= 3; dx++) {
                         int ny = cy + dy, nx = cx + dx;
                         if (ny < first_line || ny >= TCELL_H || nx < 0 || nx >= LBL_W || seen[ny * LBL_W + nx] || !clean_lit(clean, nx, ny))
                             continue;

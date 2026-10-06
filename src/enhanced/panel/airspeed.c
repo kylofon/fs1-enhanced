@@ -49,7 +49,7 @@ void airspeed_draw(const CockpitFrame *f, const CockpitModule *m)
         else
             tick((float)k, 0.90f, 0.95f, 1.5f, kit_grey);
     }
-    const float text_h = 8.0f; /* cap height, output pixels */
+    const float text_h = 6.8f; /* cap height, output pixels */
     for (int k = 40; k <= 200; k += 20) {
         char s[8];
         snprintf(s, sizeof s, "%d", k);

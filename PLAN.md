@@ -18,6 +18,7 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 | Task | What to do | For | Time |
 |---|---|---|---|
+| U1 | S2.10-S2.13 bottom row (turn coordinator, heading indicator, VSI + elevator strip, tachometer): close the game, `cmake --build build`, run next to `--classic` (`--module-off turn,heading,vsi,tach` = old look), take off and fly: turn symbol tilts with the turn, ball moves; heading digits and the turning card; VSI needle, elevator marker, rudder marker/track at the bottom; tach needle. Reply `OK` or what is wrong per gauge (scale positions, directions, sizes, overlaps, anything missing) | S2.10-13 | 8 min |
 | U1 | S2.9 OMI/VOR indicator: close the game, `cmake --build build`, run next to `--classic` (`--module-off omi` = old look), tune a NAV station (or just fly): ring and card, course needle, glide-slope bar, OFF/TO/FROM, the O/M/I lights above, the two 3-digit numbers below (OBS course and reciprocal). Reply `OK` or what is wrong (needle/bar position and direction vs classic, flag text, light order/colours, number positions) | S2.9 | 5 min |
 | U1 | S2.8 altimeter: close the game, `cmake --build build`, run next to `--classic` (`--module-off altimeter` = old look), take off and climb: ring, 50 ticks, numerals 0-9, ALT, long hand (1000 ft/turn) and short thick hand (10000 ft/turn). Reply `OK` or what is wrong (hand angles vs classic, sizes, the small boxed label in the old dial that is NOT redrawn, see notes) | S2.8 | 3 min |
 | U1 | S2.7 attitude indicator: close the game, `cmake --build build`, run next to `--classic` (`--module-off attitude` = old look), take off and bank/pitch (keys, or `--poke` in a test run): sky/ground split with a smooth horizon, bank pointer on the disc, fixed roll ticks on the ring, aircraft symbol. Reply `OK` or what is wrong (horizon position or tilt direction vs classic, which side is sky, pointer direction, sizes, colours) | S2.7 | 3 min |
@@ -30,8 +31,8 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 ## Status
 
-- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending), S2.4 (U1 pending), S2.5, S2.6 (U1 pending), S2.7 (U1 pending), S2.8 (U1 pending), S2.9 (U1 pending).
-- **Next:** the cockpit modules S2.10–S2.19 (Sonnet), one per session, in any order; `docs/PANEL.md` says how. Decisions D1–D4 below are binding.
+- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending), S2.4 (U1 pending), S2.5, S2.6 (U1 pending), S2.7 (U1 pending), S2.8 (U1 pending), S2.9 (U1 pending), S2.10-S2.13 (U1 pending).
+- **Next:** the cockpit modules S2.14–S2.19 (Sonnet), one per session, in any order; `docs/PANEL.md` says how. Decisions D1–D4 below are binding.
 - Escalation rule: a subtask that fails twice on Sonnet → new Opus session with a 5-line note
   (symptom, file, what was tried). Never carry an old transcript over.
 
@@ -99,10 +100,10 @@ a time. Every module subtask: measure the layout from the clean panel (cseg:0122
 | S2.7 | Attitude indicator (replaces S2.3: sky/ground split with sub-pixel horizon, bank marks and pointer, aircraft symbol) | S | M | done 2026-10-06, U1 pending |
 | S2.8 | Altimeter (ALT, 0-9 scale, both hands, the small 100s/1000s window) | S | M | done 2026-10-06, U1 pending |
 | S2.9 | OMI/VOR indicator (OBS card, CDI bar, TO/FROM, the 3-digit OBS window, bottom heading box) | S | M | |
-| S2.10 | Turn coordinator (L/R marks, aircraft symbol, ball/inclinometer box) | S | M | |
-| S2.11 | Heading indicator (DG card numerals, lubber line, digital heading box) | S | M | |
-| S2.12 | Vertical speed indicator (UP/DN, 5/10/15 scale, needle) and the elevator trim strip next to it | S | M | |
-| S2.13 | Tachometer (RPM, 5-35 scale, needle) | S | S | |
+| S2.10 | Turn coordinator (L/R marks, aircraft symbol, ball/inclinometer box) | S | M  done 2026-10-06, U1 pending |
+| S2.11 | Heading indicator (DG card numerals, lubber line, digital heading box) | S | M  done 2026-10-06, U1 pending |
+| S2.12 | Vertical speed indicator (UP/DN, 5/10/15 scale, needle) and the elevator trim strip next to it | S | M  done 2026-10-06, U1 pending |
+| S2.13 | Tachometer (RPM, 5-35 scale, needle) | S | S  done 2026-10-06, U1 pending |
 | S2.14 | Throttle/flaps strip (F/L/D/T column left of COMPASS: markers and bar) | S | S | |
 | S2.15 | COMPASS box (magnetic heading digits) (the O/M/I lights are in the OMI module, done in S2.9) | S | S | |
 | S2.16 | FUEL (two E-F gauges), OIL T and OIL P gauges | S | S | |
@@ -218,6 +219,14 @@ Notes:
   marker lights DS:1A16 (bit 0 outer, 1 middle, 2 inner; left to right O M I, blue / amber / white), OBS course and reciprocal = the ASCII digits of the readout
   record DS:07B9 (+2, +8). The lights sit in this gauge's rect (lines 115-119), not in the COMPASS box: S2.15 does not need them. The needle and bar are drawn
   also when the flag is OFF (the original does too). Own layout: 4+4 deviation dots at +-11/17/23/29 px, centre box. Cycles identical to `--classic`.
+- S2.10-S2.13 (bottom row): `turn.c`, `heading.c`, `vsi.c`, `tach.c`, `strips.{h,c}` (shared rudder track/marker, drawn by whichever of heading/vsi holds the marker).
+  All needles/values from the game state: turn tilt = turn_rate (085A) * 190h >> 16 clamped +-6, 7.3 deg per step (measured from the 13 sprites at DS:16DD), ball =
+  byte DS:08F7 (x = 24 + frame + 3, frame = ball + 31); heading = the 3 ASCII digits at DS:0799 (the card is an addition, the original shows only digits + symbol);
+  VSI = oldest sample DS:091B * 7D0h >> 15 (+-125 units, 0 at 9 o'clock), numerals 5/10/15 at 45 degrees; tach = engine_rpm (1DC0) * 3B6h >> 8 + 8Ah, numerals 5..35
+  placed 270 -> 502 degrees (read from the clean panel: 5, 10, 15 ... 35; the needle reads 6 at idle, 34 at full power). Control indicators are
+  draw_indicator descriptors (12 bytes, DS:1401..: ball 1431, aileron 143D, rudder 1449, elevator 1455, throttle 1461, flaps 146D, trim 1479; +6 = frame):
+  elevator marker y = 187 - frame, rudder marker x = 176 + frame + 3.5 on the dotted track at line 199 (x 186..239). The aileron track/marker (line ~159-160, x 176..248)
+  lies above the modules and is still CGA pixels (S2.19). Cycles identical to `--classic`.
 
 ## User tasks
 ### U1 — Visual checks (when an agent asks)

@@ -10,5 +10,6 @@
 - Attitude indicator (S2.7) redrawn as a vector module: sub-pixel horizon from the game's bank and pitch, roll scale and pointer, aircraft symbol.
 - Altimeter (S2.8) redrawn as a vector module: scale, numerals, long and short hands from the game's altitude.
 - OMI/VOR indicator (S2.9) redrawn as a vector module: course needle, glide-slope bar, TO/FROM, marker lights, OBS numbers.
+- Turn coordinator, heading indicator (with a turning card), vertical speed indicator + elevator strip and tachometer (S2.10-S2.13) redrawn as vector modules.
 - Sharp panel (S2.1): the airspeed, altimeter, VSI and tachometer needles are drawn as vector lines at window
   size; the pixel needle sprites are taken out of the picture (`--needle-width F`, `--dump-panel FILE`).

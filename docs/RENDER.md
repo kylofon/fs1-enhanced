@@ -259,6 +259,18 @@ float vector is computed from the raw point instead:
 | `dl_steps_begin(P, rSI)` | dotted/dashed set-up `f_43B4` (`scenery.c`, end) | the steps start at the second end point (DS:SI-6): its float vector over its words gives the scale of every step point |
 | `dl_step(P)` | `f_4428` (`scenery.c`, end) | step point 31B5.. = words x that scale, identity = opcode address + step number |
 | `dl_line_begin(P)` | `clip_project_line` (`scenery.c`, entry) | looks both ends (310F, 311B, not clipped yet) up by their words; `dl_stage_p2` hands them to the line |
+| `dl_origin(P)` | op 24 `h_origin` (`scenery.c`, end) | keeps the fraction the game drops from the local frame's eye (below) |
+
+**The eye's fraction (op 24).** A local frame sets `eye_pos = (pos - origin) >> s`, with s = 0, 4, 8, 12 or 16 bits by
+the scenery scale ([30DD] -> handler table 316C), truncated. In a coarse frame the eye therefore stands still for
+several simulation frames and then jumps a whole step, and the scenery in that frame with it (the original does
+this too; interpolated, it became a slide to a new position, seen on a long flight along the shore). `dl_origin`
+keeps the dropped low bits of pos - origin per axis as a fraction; while eye_pos still holds the words op 24
+wrote, `dl_eye_delta` subtracts eye + fraction, so far scenery moves steadily. Such vertices are flagged
+`DL_V_ORIGIN` and keep the fraction's eye-space offset (`ef`): the game's own point is `e + ef`, which the
+`--dl-check` comparison uses. `--dl-check` also counts visible points whose screen motion changes by more than
+2 px from one interval to the next (turns count too): in the demo flight 286 of 15430 in op 24 frames without the
+fraction, 217 with it.
 
 Lines and dots find their vertices by the **eye words**: a point keeps the words rotate_point gave it while it is
 copied around (move start 3133, previous end 3127, cache slots 3288..), so no hook is needed at the copies; the

@@ -78,7 +78,13 @@ typedef struct DlItem {
 typedef struct DlVtx {
     float e[3], e0[3];
     uint64_t key;
+    float ef[3];   /* what the eye's fraction (op 24) moved it: the game's own point is e + ef */
+    uint8_t flags; /* DL_V_* */
 } DlVtx;
+enum {
+    DL_V_MATCHED = 1, /* found in the previous frame (e0 is its position there) */
+    DL_V_ORIGIN = 2,  /* in a local frame of op 24 whose eye position the game truncates (shift > 0) */
+};
 
 typedef struct DlFrame {
     DlItem items[DL_MAX_ITEMS];
@@ -163,6 +169,8 @@ void dl_rotated_(Pc *pc);
 void dl_steps_begin_(Pc *pc, uint16_t si);
 void dl_step_(Pc *pc);
 void dl_line_begin_(Pc *pc);
+/* Op 24 origin (scenery.c h_origin, end): eye_pos = (pos - origin) >> shift, truncated; keeps the fraction. */
+void dl_origin_(Pc *pc);
 
 #define DL_HOOK(call) do { if (dl_on) call; } while (0)
 static inline void dl_stage_p1(Pc *pc, bool from_prev, uint16_t sw) { DL_HOOK(dl_stage_p1_(pc, from_prev, sw)); }
@@ -187,5 +195,6 @@ static inline void dl_rotated(Pc *pc) { DL_HOOK(dl_rotated_(pc)); }
 static inline void dl_steps_begin(Pc *pc, uint16_t si) { DL_HOOK(dl_steps_begin_(pc, si)); }
 static inline void dl_step(Pc *pc) { DL_HOOK(dl_step_(pc)); }
 static inline void dl_line_begin(Pc *pc) { DL_HOOK(dl_line_begin_(pc)); }
+static inline void dl_origin(Pc *pc) { DL_HOOK(dl_origin_(pc)); }
 
 #endif

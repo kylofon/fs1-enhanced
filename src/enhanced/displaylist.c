@@ -383,7 +383,7 @@ static void rotate_f(Pc *pc, const float d[3], float e[3])
 
 /* A new vertex of the building frame, found later by the eye words (x, y, z). base = identity without the
  * occurrence (0: none); the n-th use of the same base in a frame gets occurrence n. */
-static void new_vtx(const float e[3], uint64_t base, uint16_t x, uint16_t y, uint16_t z)
+static void new_vtx(const float e[3], const float ef[3], uint64_t base, uint8_t flags, uint16_t x, uint16_t y, uint16_t z)
 {
     DlFrame *f = cur();
     if (f->n_vtx >= DL_MAX_VTX)
@@ -393,6 +393,9 @@ static void new_vtx(const float e[3], uint64_t base, uint16_t x, uint16_t y, uin
     memcpy(v->e, e, sizeof v->e);
     memcpy(v->e0, e, sizeof v->e0);
     v->key = 0;
+    v->flags = flags;
+    for (int k = 0; k < 3; k++)
+        v->ef[k] = ef ? ef[k] : 0.0f;
     int *occ = base ? h_slot(&occ_tab, base, true) : NULL;
     if (occ)
         v->key = base | (uint64_t)(uint32_t)++*occ << 40;
@@ -403,7 +406,37 @@ static void new_vtx(const float e[3], uint64_t base, uint16_t x, uint16_t y, uin
 
 static uint64_t point_base(uint16_t addr, unsigned step) { return 1ull << 63 | addr | (uint64_t)step << 16; }
 
-static struct { bool valid; uint16_t w[3]; float d[3]; uint64_t base; } pend; /* world_to_eye_delta -> rotate_point */
+static struct { bool valid; uint16_t w[3]; float d[3], fr[3]; uint64_t base; uint8_t flags; } pend; /* world_to_eye_delta -> rotate_point */
+
+/* Op 24 sets eye_pos = (pos - origin) >> shift (0, 4, 8, 12 or 16 bits, by the scenery scale), truncated: in a
+ * coarse local frame the eye stands still for several frames and then jumps a whole step, and the scenery in
+ * it with it (in the original too). The vertices take the eye with its fraction instead, so far scenery moves
+ * steadily. Valid while eye_pos still holds the words op 24 wrote. */
+static struct { bool valid; uint16_t q[3]; float frac[3]; } origin;
+
+void dl_origin_(Pc *pc)
+{
+    origin.valid = false;
+    uint16_t di = (uint16_t)s16(pc, 0x30DD), shift;
+    switch ((uint16_t)s16(pc, (uint16_t)(di + 0x316C))) { /* the handler scale_shift jumps to */
+    case 0x4073: shift = 0; break;
+    case 0x4063: shift = 4; break;
+    case 0x4074: shift = 8; break;
+    case 0x4079: shift = 12; break;
+    case 0x4089: shift = 16; break;
+    default: return;
+    }
+    if (!shift)
+        return;
+    for (int i = 0; i < 3; i++) {
+        uint16_t p = (uint16_t)(0x30D1 + 4 * i), o = (uint16_t)(0x30DF + 4 * i);
+        uint32_t v = ((uint32_t)(uint16_t)s16(pc, (uint16_t)(p + 2)) << 16 | (uint16_t)s16(pc, p)) -
+                     ((uint32_t)(uint16_t)s16(pc, (uint16_t)(o + 2)) << 16 | (uint16_t)s16(pc, o));
+        origin.q[i] = (uint16_t)s16(pc, (uint16_t)(EYE_POS + 2 * i));
+        origin.frac[i] = (float)(v & ((1u << shift) - 1)) / (float)(1u << shift);
+    }
+    origin.valid = true;
+}
 static struct { bool valid; float sigma; uint16_t op; unsigned k; } steps;     /* dotted / dashed line */
 
 void dl_eye_delta_(Pc *pc, uint16_t start, uint16_t end, uint16_t x, uint16_t y, uint16_t z)
@@ -413,8 +446,15 @@ void dl_eye_delta_(Pc *pc, uint16_t start, uint16_t end, uint16_t x, uint16_t y,
     if (n != 4 && n != 6)
         return;
     float p[3] = { s16(pc, start), n == 6 ? s16(pc, (uint16_t)(start + 2)) : s16(pc, FLAT_Y), s16(pc, (uint16_t)(end - 2)) };
+    uint16_t eye[3];
     for (int i = 0; i < 3; i++)
-        pend.d[i] = p[i] - (float)s16(pc, (uint16_t)(EYE_POS + 2 * i));
+        eye[i] = (uint16_t)s16(pc, (uint16_t)(EYE_POS + 2 * i));
+    bool fine = origin.valid && eye[0] == origin.q[0] && eye[1] == origin.q[1] && eye[2] == origin.q[2];
+    for (int i = 0; i < 3; i++) {
+        pend.fr[i] = fine ? origin.frac[i] : 0.0f;
+        pend.d[i] = p[i] - (float)(int16_t)eye[i] - pend.fr[i];
+    }
+    pend.flags = fine ? DL_V_ORIGIN : 0;
     pend.w[0] = x, pend.w[1] = y, pend.w[2] = z;
     pend.base = point_base(start, 0);
     pend.valid = true;
@@ -427,17 +467,22 @@ void dl_rotated_(Pc *pc)
         in[i] = (uint16_t)s16(pc, (uint16_t)(XFORM_IN + 2 * i));
     float d[3], e[3];
     uint64_t base = 0;
+    uint8_t flags = 0;
     if (pend.valid && pend.w[0] == in[0] && pend.w[1] == in[1] && pend.w[2] == in[2]) {
         memcpy(d, pend.d, sizeof d);
-        base = pend.base;
+        base = pend.base, flags = pend.flags;
     } else { /* not from world_to_eye_delta (war planes): the delta itself, no identity */
         for (int i = 0; i < 3; i++)
             d[i] = (float)(int16_t)in[i];
     }
+    float fr[3] = { 0, 0, 0 }, ef[3];
+    if (flags & DL_V_ORIGIN)
+        memcpy(fr, pend.fr, sizeof fr);
     pend.valid = false;
     rotate_f(pc, d, e);
+    rotate_f(pc, fr, ef);
     const uint16_t *r = pc->cpu.regs;
-    new_vtx(e, base, r[R_BX], r[R_CX], r[R_DX]);
+    new_vtx(e, ef, base, flags, r[R_BX], r[R_CX], r[R_DX]);
 }
 
 /* The current step point (31B5..) of a dotted/dashed line: the words times the scale of its start point. */
@@ -449,7 +494,7 @@ static void step_vtx(Pc *pc)
         w[i] = (uint16_t)s16(pc, (uint16_t)(STEP_POINT + 2 * i));
         e[i] = steps.sigma * (float)(int16_t)w[i];
     }
-    new_vtx(e, point_base(steps.op, ++steps.k), w[0], w[1], w[2]);
+    new_vtx(e, NULL, point_base(steps.op, ++steps.k), 0, w[0], w[1], w[2]);
 }
 
 /* After the set-up: the steps start at the second end point (SI - 6), already scaled like the first. */
@@ -1237,6 +1282,20 @@ static uint32_t prev_view;
 static long sm_frames, sm_vtx, sm_matched;
 static double sm_dt;
 
+static long jk_n[2], jk_bad[2]; /* [in an op 24 frame]: vertices with three positions, of them with a jerk */
+
+static void jerk_count(const float *e2, const float *e1, const float *e0, uint8_t flags)
+{
+    if (e2[2] <= 0 || e1[2] <= 0 || e0[2] <= 0 || fabsf(e0[0]) > e0[2] || fabsf(e0[1]) > e0[2])
+        return;
+    int o = (flags & DL_V_ORIGIN) != 0;
+    float dx = 79.0f * (e0[0] / e0[2] - 2 * e1[0] / e1[2] + e2[0] / e2[2]);
+    float dy = 52.0f * (e0[1] / e0[2] - 2 * e1[1] / e1[2] + e2[1] / e2[2]);
+    jk_n[o]++;
+    if (fabsf(dx) + fabsf(dy) > 2.0f)
+        jk_bad[o]++;
+}
+
 static void match_vertices(Pc *pc, DlFrame *f)
 {
     uint32_t view = d16(pc, VIEW_DIR_FN) | (uint32_t)d8(pc, RADAR_VIEW) << 16;
@@ -1256,7 +1315,11 @@ static void match_vertices(Pc *pc, DlFrame *f)
         if (dd > (na > nb ? na : nb))
             continue;
         memcpy(v->e0, a, sizeof v->e0);
+        v->flags |= DL_V_MATCHED;
         f->matched++;
+        const DlVtx *pv = &p->vtx[*j];
+        if (chk_on && (pv->flags & DL_V_MATCHED)) /* screen motion of the last two intervals: a jump shows as a change */
+            jerk_count(pv->e0, pv->e, v->e, v->flags);
     }
     h_clear(&key_tab);
     for (int i = 0; i < f->n_vtx; i++) {
@@ -1308,6 +1371,10 @@ static void sm_stats(void)
     if (sm_frames)
         fprintf(stderr, "smooth: %ld frames, %.0f ms apart on average, %.1f%% of %ld vertices found in the previous frame\n",
                 sm_frames, sm_dt / (double)sm_frames / PC_CPU_HZ * 1000.0, 100.0 * (double)sm_matched / (double)sm_vtx, sm_vtx);
+    for (int o = 0; o < 2; o++)
+        if (jk_n[o])
+            fprintf(stderr, "smooth: %s: %ld of %ld visible points change their screen motion by more than 2 px from one interval to the next\n",
+                    o ? "in coarse local frames (op 24)" : "elsewhere", jk_bad[o], jk_n[o]);
 }
 
 /* ---- S3.2 the view between two simulation frames --------------------------------------------- */
@@ -1408,11 +1475,13 @@ static void poly_at(DlFrame *f, DlItem *it)
 }
 
 /* Frame f with every vertex at e0 + (e - e0) * s. */
+static bool game_eye; /* --dl-check: the game's own (truncated) eye, to compare with the recorded floats */
+
 static const DlFrame *view_s(const DlFrame *f, float s)
 {
     for (int i = 0; i < f->n_vtx; i++)
         for (int k = 0; k < 3; k++)
-            lerp_v[i][k] = f->vtx[i].e0[k] + (f->vtx[i].e[k] - f->vtx[i].e0[k]) * s;
+            lerp_v[i][k] = f->vtx[i].e0[k] + (f->vtx[i].e[k] - f->vtx[i].e0[k]) * s + (game_eye ? f->vtx[i].ef[k] : 0.0f);
     DlFrame *l = &lerp_f;
     memcpy(l->items, f->items, (size_t)f->n_items * sizeof *f->items);
     memcpy(l->verts, f->verts, (size_t)f->n_verts * sizeof *f->verts);
@@ -1473,7 +1542,9 @@ static float dist_line(DlPt p, DlPt a, DlPt b) /* distance of p from the infinit
 static void smooth_check(void)
 {
     const DlFrame *f = dl_view();
+    game_eye = true;
     const DlFrame *l = view_s(f, 1.0f);
+    game_eye = false;
     if (l == f)
         return;
     for (int i = 0; i < f->n_items; i++) {

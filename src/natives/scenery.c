@@ -939,6 +939,7 @@ static void h_origin(void)
     origin_axis(0x30D1, 0x30DF, 0x30EB, 0x4029);
     origin_axis(0x30D5, 0x30E3, 0x30ED, 0x4042);
     origin_axis(0x30D9, 0x30E7, 0x30EF, 0x405B);
+    dl_origin(P); /* ENH: display list (S3.2: the eye's fraction) */
     ret_();
 }
 

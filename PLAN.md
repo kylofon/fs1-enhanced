@@ -18,7 +18,6 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 | Task | What to do | For | Time |
 |---|---|---|---|
-| U1 | S3.2 smooth motion, 3rd look (fixed: far scenery that stood still and then slid to a new place; the game truncates the eye position in coarse scenery frames, the smooth view now keeps the fraction): close the game, `cmake --build build`, run `build/fs1-enhanced.exe`, fly a long way along the coast and over the lake. Reply `OK` or what is still wrong (where, and does it also happen with `--smooth off`, i.e. in the game itself) | S3.2 | 5 min |
 | U1 | Cockpit follow-ups (first answer 2026-10-07, from a screenshot: the top-left corner under the view shows the ground down to the glareshield curve, whose edge is a staircase of pixel steps, not a curve; to fix in its own session: the frame module's glareshield curve as a smooth line, and the fill below the view bounded by that line instead of per-column steps): (1) in flight the sky and ground now continue behind the cockpit's top edge (the black strip under the view and the top-left corner above the glareshield curve; scenery objects are still clipped at the old view border); (2) the start-up menu screen shows the vector cockpit too. Rebuild, run next to `--classic`: look at the top-left corner of the panel in flight (horizon line crossing the gap, colours matching) and at the menu screens (A, B). Reply `OK` or what is wrong | follow-up | 3 min |
 | U1 | S2.14-S2.19 right panel and frame (throttle/flaps/trim strips, COMPASS + O M I lights, FUEL/OIL gauges, GEAR/LIGHTS/MAGS/CARB H, radio stack COM/NAV/TRANSPONDER/TIME, panel frame): close the game, `cmake --build build`, run next to `--classic` (`--module-off all` = old look, or by name, e.g. `--module-off frame`), take off, press G, L, H, A etc. and tune the radios: every value should show and change as in classic. Reply `OK` or what is wrong per part (missing/wrong text, sliders moving the wrong way, boxes, lines missing at the panel edges or between gauges) | S2.14-19 | 10 min |
 | U1 | S2.10-S2.13 bottom row (turn coordinator, heading indicator, VSI + elevator strip, tachometer): close the game, `cmake --build build`, run next to `--classic` (`--module-off turn,heading,vsi,tach` = old look), take off and fly: turn symbol tilts with the turn, ball moves; heading digits and the turning card; VSI needle, elevator marker, rudder marker/track at the bottom; tach needle. Reply `OK` or what is wrong per gauge (scale positions, directions, sizes, overlaps, anything missing) | S2.10-13 | 8 min |
@@ -34,7 +33,7 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 ## Status
 
-- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending), S2.4 (U1 pending), S2.5, S2.6 (U1 pending), S2.7 (U1 pending), S2.8 (U1 pending), S2.9 (U1 pending), S2.10-S2.19 (U1 pending), S3.2 (U1 pending).
+- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending), S2.4 (U1 pending), S2.5, S2.6 (U1 pending), S2.7 (U1 pending), S2.8 (U1 pending), S2.9 (U1 pending), S2.10-S2.19 (U1 pending), S3.2 (U1 OK).
 - **Next:** U1 checks (rows at the top); S3.3 (scenery behind the cockpit edge, asked for 2026-10-07); then Phase 4 (S4.1).
 - Escalation rule: a subtask that fails twice on Sonnet → new Opus session with a 5-line note
   (symptom, file, what was tried). Never carry an old transcript over.
@@ -118,7 +117,7 @@ a time. Every module subtask: measure the layout from the clean panel (cseg:0122
 | Id | Task | Model | Size | Status |
 |---|---|---|---|---|
 | S3.1 | ~~Widescreen~~ dropped (D3): keep 4:3, letterbox/pillarbox at any window size, integer or smooth scaling option | S | S | dropped 2026-10-03 |
-| S3.2 | Smooth frame rate: run the simulation at the original rates, render the 3D view every display frame with interpolated eye position/attitude from the display list; no sim behaviour change | O | L | done 2026-10-07, U1 pending |
+| S3.2 | Smooth frame rate: run the simulation at the original rates, render the 3D view every display frame with interpolated eye position/attitude from the display list; no sim behaviour change | O | L | done 2026-10-07, U1 OK 2026-10-07 |
 | S3.3 | Scenery behind the cockpit edge: the strip under the view and the top-left corner above the glareshield show the 3D world, not only sky/ground fill. With S3.2 vertices the back end re-projects the scenery itself: clip against a frustum extended down to the lowest gap line (instead of the game's view pyramid), record the outline edges the game rejects as outside (seen at `clip_project_line` entry, no draw) so polygons such as the lake close correctly below the view, draw the extension clipped to the gap area; the glareshield curve drawn as a smooth line and the gap bounded by it (no pixel staircase). Scenery blocks the game culls as out of view stay missing there (known limit). No sim change; **U1 check** | O | M | |
 
 ### Phase 4 — Input

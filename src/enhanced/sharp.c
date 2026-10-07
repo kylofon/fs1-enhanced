@@ -18,6 +18,10 @@ static float line_width = 2.0f;
 
 void sharp_set_line_width(float w) { line_width = w < 0 ? 0 : w; }
 
+static bool view_border;
+
+void sharp_set_view_border(bool on) { view_border = on; }
+
 /* ---- colour ------------------------------------------------------------------------------- */
 
 /* The colour a field of the pattern shows on the composite monitor (kit.h). */
@@ -921,6 +925,10 @@ static bool view_draw(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga)
         const DlItem *it = &f->items[i];
         switch (it->kind) {
         case DL_FILL:
+            /* draw_view_frame's border: one pixel of column 0 per line (scenery is clipped to columns 1..159);
+             * left out, the sky and ground reach the screen's left edge */
+            if (!view_border && it->u.rect.x == 0 && it->u.rect.w == 1)
+                break;
             fill_rect(it->u.rect.x, it->u.rect.y, it->u.rect.w, it->u.rect.h, col_word(it->colour));
             break;
         case DL_SKYGROUND:

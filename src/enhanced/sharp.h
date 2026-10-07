@@ -11,6 +11,8 @@
 
 /* Width of a line in output pixels of the 640x480 logical screen; 0 draws hairlines with SDL_RenderLines. */
 void sharp_set_line_width(float w);
+/* --view-border: keep the white left border of the 3D window the game draws in daylight (default: left out). */
+void sharp_set_view_border(bool on);
 
 /* --dump-panel FILE: one text line per needle per frame (fitted ends, width, colour). */
 void sharp_set_dump_panel(const char *path);

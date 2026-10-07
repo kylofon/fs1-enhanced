@@ -11,6 +11,7 @@ Status and plan: [PLAN.md](PLAN.md) (as a page: `python tools/plan_site.py`, the
 ## Features
 
 * `--classic`: the original picture and behaviour, as the faithful port v0.1.0.
+* `--view-border`: keep the white left border of the 3D window (the sharp view leaves it out).
 * More to come (PLAN.md): sharp 3D view, panel and text; widescreen; smooth frame rate; gamepad and
   mouse yoke; key bindings, settings, quick save; a launcher.
 

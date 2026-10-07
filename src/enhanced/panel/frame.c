@@ -31,7 +31,7 @@ static int n_segs, n_runs, cap_segs, cap_runs;
 static uint32_t built_hash;
 static bool built;
 
-static bool lit(const uint8_t *img, int x, int y) { return x >= 0 && x < W && img[(y & 1) * 0x2000 + (y >> 1) * 80 + (x >> 3)] >> (7 - (x & 7)) & 1; }
+static bool lit(const uint8_t *img, int x, int y) { return x >= 0 && x < W && cockpit_clean_lit(img, x, y); }
 
 static void add_seg(Seg s)
 {

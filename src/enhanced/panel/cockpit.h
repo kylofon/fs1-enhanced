@@ -59,6 +59,10 @@ void cockpit_add_text(int x, int line, uint8_t ch, uint8_t dim);
 void cockpit_add_needle(uint16_t desc, float hx, float hy, float tx, float ty);
 void cockpit_end(uint8_t *vram);
 
+/* Pixel (x, line) of the clean panel image, without draw_view_frame's border, which also lands on line 107
+ * (x 0..3) of the back buffer but is never copied to the screen. */
+bool cockpit_clean_lit(const uint8_t *clean, int x, int line);
+
 /* True if (x, line) is inside the rect of an ordinary (non-rest) module, drawn or not. */
 bool cockpit_in_module(int x, int line);
 

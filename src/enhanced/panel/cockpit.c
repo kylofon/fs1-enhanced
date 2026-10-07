@@ -66,6 +66,13 @@ static bool active; /* the panel is on screen this frame */
 
 static bool drawn(int i) { return modules[i].draw && !off[i]; }
 
+bool cockpit_clean_lit(const uint8_t *clean, int x, int line)
+{
+    if (line == 107 && x < 4)
+        return false;
+    return clean[(line & 1) * 0x2000 + (line >> 1) * 80 + (x >> 3)] >> (7 - (x & 7)) & 1;
+}
+
 static int gap_y[640];
 static bool gap_on;
 
@@ -81,7 +88,7 @@ void cockpit_begin(const Pc *pc, const uint8_t *clean)
     static int raw[640];
     for (int x = 0; x < 640; x++) { /* the first lit line of the clean panel from line 107 down (at most 125) */
         int y = 107; /* lines 0..106 of the clean image change from frame to frame */
-        while (y < 125 && !(clean[(y & 1) * 0x2000 + (y >> 1) * 80 + (x >> 3)] >> (7 - (x & 7)) & 1))
+        while (y < 125 && !cockpit_clean_lit(clean, x, y))
             y++;
         raw[x] = y;
     }

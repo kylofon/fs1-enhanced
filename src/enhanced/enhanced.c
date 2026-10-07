@@ -50,6 +50,10 @@ bool enh_parse_arg(int argc, char *argv[], int *i)
         sharp_set_line_width((float)SDL_atof(argv[++*i]));
         return true;
     }
+    if (SDL_strcmp(argv[*i], "--view-border") == 0) {
+        sharp_set_view_border(true);
+        return true;
+    }
     if (SDL_strcmp(argv[*i], "--verify") == 0 || SDL_strcmp(argv[*i], "--native-off") == 0)
         enh.original_code = true; /* not consumed: main handles it */
     return false;

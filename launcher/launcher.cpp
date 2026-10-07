@@ -99,6 +99,7 @@ LauncherFrame::LauncherFrame()
     for (int i = 0; i < START_LOCATION_COUNT; ++i)
         if (START_LOCATIONS[i].mode == mode) start_->SetSelection(i);
     lineWidth_->SetValue(wxMax(0, wxMin(MAX_LINE_WIDTH, settings::GetInt(SECTION, "LineWidth", DEFAULT_LINE_WIDTH))));
+    smooth_->SetSelection(wxMax(0, wxMin(2, settings::GetInt(SECTION, "Smooth", 0))));
     rgb_->SetValue(settings::GetInt(SECTION, "Rgb", 0) != 0);
     sound_->SetValue(settings::GetInt(SECTION, "Sound", 1) != 0);
     loading_ = false;
@@ -181,6 +182,14 @@ void LauncherFrame::CreateContent() {
     widthRow->Add(lineWidth_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, gap);
     widthRow->Add(GreyText(ob, "pixels of the window (0 = hairlines)"), 0, wxALIGN_CENTER_VERTICAL);
     grid->Add(widthRow, 0, wxALIGN_CENTER_VERTICAL);
+    grid->Add(new wxStaticText(ob, wxID_ANY, "&Motion:"), 0, wxALIGN_CENTER_VERTICAL);
+    const wxString motions[] = {"Smooth", "Smooth, without delay", "As the original"};
+    smooth_ = new wxChoice(ob, wxID_ANY, wxDefaultPosition, wxDefaultSize, 3, motions);
+    smooth_->SetToolTip("The game draws its 3D view about 5 times a second. Smooth moves the view on at every "
+                        "frame of the screen, from the last two pictures the game drew (shown one game picture "
+                        "late); without delay continues the motion past the last picture instead (no delay, may "
+                        "overshoot when the motion changes). The flight itself is the same in every setting.");
+    grid->Add(smooth_, 0, wxALIGN_CENTER_VERTICAL);
     optionsBox->Add(grid, 0, wxLEFT | wxRIGHT | wxTOP, gap);
     rgb_ = new wxCheckBox(ob, wxID_ANY, "Start on the &RGB monitor (instead of the sharp view)");
     rgb_->SetToolTip("F11 in the game cycles the sharp view, the composite monitor and the RGB monitor.");
@@ -298,6 +307,7 @@ void LauncherFrame::Play() {
     const int i = start_->GetSelection();
     options.startMode = i >= 0 ? START_LOCATIONS[i].mode : 0;
     options.lineWidth = lineWidth_->GetValue();
+    options.smooth = smooth_->GetSelection();
     options.rgb = rgb_->GetValue();
     options.sound = sound_->GetValue();
     wxString error;
@@ -313,6 +323,7 @@ void LauncherFrame::Save() {
     const int i = start_->GetSelection();
     settings::SetInt(SECTION, "StartMode", i >= 0 ? START_LOCATIONS[i].mode : 0);
     settings::SetInt(SECTION, "LineWidth", lineWidth_->GetValue());
+    settings::SetInt(SECTION, "Smooth", smooth_->GetSelection());
     settings::SetInt(SECTION, "Rgb", rgb_->GetValue() ? 1 : 0);
     settings::SetInt(SECTION, "Sound", sound_->GetValue() ? 1 : 0);
     settings::SaveWindowPosition(SECTION, this);

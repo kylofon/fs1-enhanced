@@ -896,7 +896,7 @@ static void panel_draw(SDL_Renderer *r)
 
 static bool view_draw(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga)
 {
-    const DlFrame *f = dl_view();
+    const DlFrame *f = dl_view_at(pc->cpu.cycles); /* S3.2: the view moved on to this display frame's time */
     if (!f || f->incomplete || !pc->composite || (pc->cga_mode & 0x1E) != 0x1A)
         return false;
     view_y0 = f->view_row;
@@ -923,6 +923,8 @@ static bool view_draw(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga)
 
     for (int i = 0; i < f->n_items; i++) {
         const DlItem *it = &f->items[i];
+        if (it->flags & DL_F_HIDDEN) /* out of the view at this time */
+            continue;
         switch (it->kind) {
         case DL_FILL:
             /* draw_view_frame's border: one pixel of column 0 per line (scenery is clipped to columns 1..159);

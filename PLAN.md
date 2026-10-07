@@ -18,6 +18,7 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 | Task | What to do | For | Time |
 |---|---|---|---|
+| U1 | S3.2 smooth motion: close the game, `cmake --build build`, run `build/fs1-enhanced.exe` (smooth is the default) next to `build/fs1-enhanced.exe --smooth off`, take off and fly: turns, climbs, the runway passing under you, a slew. The 3D view should glide instead of jumping ~5 times a second. Also try `--smooth ahead` (no delay, may overshoot). Reply `OK` or what is wrong (lines that wobble, swim or stretch, polygons that flicker or tear at the view edges, the horizon lagging the scenery, jumps when the view direction changes), and which mode you prefer as the default | S3.2 | 5 min |
 | U1 | Cockpit follow-ups: (1) in flight the sky and ground now continue behind the cockpit's top edge (the black strip under the view and the top-left corner above the glareshield curve; scenery objects are still clipped at the old view border); (2) the start-up menu screen shows the vector cockpit too. Rebuild, run next to `--classic`: look at the top-left corner of the panel in flight (horizon line crossing the gap, colours matching) and at the menu screens (A, B). Reply `OK` or what is wrong | follow-up | 3 min |
 | U1 | S2.14-S2.19 right panel and frame (throttle/flaps/trim strips, COMPASS + O M I lights, FUEL/OIL gauges, GEAR/LIGHTS/MAGS/CARB H, radio stack COM/NAV/TRANSPONDER/TIME, panel frame): close the game, `cmake --build build`, run next to `--classic` (`--module-off all` = old look, or by name, e.g. `--module-off frame`), take off, press G, L, H, A etc. and tune the radios: every value should show and change as in classic. Reply `OK` or what is wrong per part (missing/wrong text, sliders moving the wrong way, boxes, lines missing at the panel edges or between gauges) | S2.14-19 | 10 min |
 | U1 | S2.10-S2.13 bottom row (turn coordinator, heading indicator, VSI + elevator strip, tachometer): close the game, `cmake --build build`, run next to `--classic` (`--module-off turn,heading,vsi,tach` = old look), take off and fly: turn symbol tilts with the turn, ball moves; heading digits and the turning card; VSI needle, elevator marker, rudder marker/track at the bottom; tach needle. Reply `OK` or what is wrong per gauge (scale positions, directions, sizes, overlaps, anything missing) | S2.10-13 | 8 min |
@@ -33,8 +34,8 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 ## Status
 
-- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending), S2.4 (U1 pending), S2.5, S2.6 (U1 pending), S2.7 (U1 pending), S2.8 (U1 pending), S2.9 (U1 pending), S2.10-S2.19 (U1 pending).
-- **Next:** U1 checks of the cockpit modules (rows at the top); then Phase 3 (S3.2) and Phase 4.
+- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending), S2.4 (U1 pending), S2.5, S2.6 (U1 pending), S2.7 (U1 pending), S2.8 (U1 pending), S2.9 (U1 pending), S2.10-S2.19 (U1 pending), S3.2 (U1 pending).
+- **Next:** U1 checks (rows at the top); then Phase 4 (S4.1).
 - Escalation rule: a subtask that fails twice on Sonnet → new Opus session with a 5-line note
   (symptom, file, what was tried). Never carry an old transcript over.
 
@@ -117,7 +118,7 @@ a time. Every module subtask: measure the layout from the clean panel (cseg:0122
 | Id | Task | Model | Size | Status |
 |---|---|---|---|---|
 | S3.1 | ~~Widescreen~~ dropped (D3): keep 4:3, letterbox/pillarbox at any window size, integer or smooth scaling option | S | S | dropped 2026-10-03 |
-| S3.2 | Smooth frame rate: run the simulation at the original rates, render the 3D view every display frame with interpolated eye position/attitude from the display list; no sim behaviour change | O | L | |
+| S3.2 | Smooth frame rate: run the simulation at the original rates, render the 3D view every display frame with interpolated eye position/attitude from the display list; no sim behaviour change | O | L | done 2026-10-07, U1 pending |
 
 ### Phase 4 — Input
 | Id | Task | Model | Size | Status |
@@ -245,6 +246,14 @@ Notes:
   S2.2 smoothed text cells skip owned areas (the old status symbols no longer show under the new words); (c) `cockpit_gap_bottom(x)` (first frame line of the panel in column x,
   from the clean image, smallest of x+-2) lets `view_draw` continue the sky/ground fill below the view border down to the frame: `sky_rect` = the old split with a rectangle.
   Only fills continue (the engine clips the scenery lines and polygons at the view border; showing more of the world there would need a taller projection = engine change).
+- S3.2: per-point interpolation instead of a camera pose (the scenery changes eye position, origin and projection many times per frame): every 3D point is a
+  vertex (float eye vector from the raw point, identity = scenery address + step + occurrence), matched to the previous committed frame at the commit; the back
+  end re-projects lines, dots, the horizon and polygon outlines (rings rebuilt) at the display time. Five one-line hooks (`transform.c`: world_to_eye_delta,
+  rotate_point; `scenery.c`: clip_project_line entry, dotted/dashed set-up and step), design in `docs/RENDER.md` 6d. `--smooth on|ahead|off` (default on =
+  one game frame late), launcher "Motion". Measured: the game draws a view every 181-266 ms; 96.7-100% of the vertices are found in the previous frame in every
+  campaign session; drawn at their own time the frames match the recorded floats (max 0.5 px except a few long ground-polygon edges behind the eye, up to 17 px:
+  the game's fixed-point clip). `--dl-check` clean as before (release build; the emulator build's unrecorded-write lines are the same at HEAD). Cycles identical
+  to `--classic` in every mode (73093945 at frame 910), `--classic` screenshot identical, `verify_campaign.py` OK. Not checked by eye (U1).
 
 ## User tasks
 ### U1 — Visual checks (when an agent asks)

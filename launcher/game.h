@@ -30,6 +30,7 @@ struct GameOptions {
     wxString disk;      // the disk image (empty: the game looks beside itself and in original/)
     int startMode = 0;  // --start (0 = none)
     int lineWidth = 2;  // --line-width: output pixels of a sharp line (0 = hairlines)
+    int smooth = 0;     // --smooth: 0 on (one simulation frame behind), 1 ahead (no delay), 2 off
     bool rgb = false;   // --rgb: start on the RGB monitor (F11 cycles sharp / composite / RGB)
     bool sound = true;  // false: SDL_AUDIO_DRIVER=dummy
 };

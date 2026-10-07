@@ -280,6 +280,7 @@ static void n_rotate_point(Pc *pc)
     c->regs[R_DI] = (uint16_t)r1;
     c->regs[R_DX] = (uint16_t)(r2 >> 16);
     c->regs[R_BP] = (uint16_t)r2;
+    dl_rotated(pc); /* ENH: display list (S3.2 vertex) */
     native_ret(pc);
 }
 
@@ -383,6 +384,7 @@ z_scaled: /* 49EC */
     dx = sar16(e2, 1);
     ax = sar16((uint16_t)(sar16(ax, 1) - dx), 4);
 store: /* 4996 */
+    dl_eye_delta(pc, (uint16_t)(c->regs[R_BX] + 1), si, bx, cx, ax); /* ENH: display list (S3.2 vertex) */
     gs_set_xform_in_w(pc, 0, bx);
     gs_set_xform_in_w(pc, 1, cx);
     gs_set_xform_in_w(pc, 2, ax);

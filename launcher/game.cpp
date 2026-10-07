@@ -80,6 +80,10 @@ bool LaunchGame(const GameOptions& o, wxString& error) {
     }
     std::vector<wxString> args{o.program, "--line-width", wxString::Format("%d", o.lineWidth)};
     if (o.rgb) args.push_back("--rgb");
+    if (o.smooth > 0) {
+        args.push_back("--smooth");
+        args.push_back(o.smooth == 1 ? "ahead" : "off");
+    }
     if (o.startMode > 0) {
         args.push_back("--start");
         args.push_back(wxString::Format("%d", o.startMode));

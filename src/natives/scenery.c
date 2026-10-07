@@ -459,6 +459,7 @@ static void f_4CA3(void)
  * clip_line_planes (at most [3162] steps), then project and draw. Clears [3163]. */
 static void f_clip_project_line(void)
 {
+    dl_line_begin(P); /* ENH: display list (S3.2 vertex) */
     wr8(0x3164, 1);
     CY(MOV_MI);
     rCX = rd16(GS_OUTCODE1);
@@ -1308,6 +1309,7 @@ static void f_43B4(void)
     rCX = rd16(0x31B7);
     rBP = rd16(0x31B9);
     CY(3 * MOV_RM);
+    dl_steps_begin(P, rSI); /* ENH: display list (S3.2 vertex) */
     ret_();
 }
 
@@ -1325,6 +1327,7 @@ static void f_4428(void)
         C->regs[r[i]] = w;
         CY(MOV_RM + ALU_RM + MOV_RM + ALU_RM + MOV_MR);
     }
+    dl_step(P); /* ENH: display list (S3.2 vertex) */
     ret_();
 }
 

@@ -131,8 +131,8 @@ fallback in section 5 shows them.
 ## 5. Frames, validity and the CGA fallback
 
 - **View list.** Built between two `blit_view_to_screen` calls, committed at the blit. The back end
-  always draws the last committed list; the simulation's frame rate is unchanged (S3.2 later
-  interpolates).
+  always draws the last committed list; the simulation's frame rate is unchanged (S3.2 moves its
+  points on to the display frame's time, section 6d).
 - **Screen layer** (S2.1/S2.2). The panel and text are drawn straight into B800 at irregular times and
   stay there, so this layer is **retained**: a list of items, each owning the screen bytes it wrote.
   Two 16 KB arrays shadow B800: `owner[byte]` (item id, 0 = none) and `expect[byte]` (the value right
@@ -209,11 +209,55 @@ Glyphs found this way are drawn with the 8x8 text-mode font (`pc->font`, the loo
 game's thin 16x5 shapes: white (grey when dim), one rectangle per run of lit pixels, 2 x 1.7 output pixels per font
 pixel. Rows the detection did not claim (shifted text, panel art) keep the smoothed-cell drawing above.
 
+## 6d. Smooth frame rate, S3.2 as built
+
+The game commits a new view about every 200-260 ms (4-5 per second, measured over the campaign sessions). The
+back end draws the view at every display frame from the last committed frame with each 3D point moved to the
+display frame's time (`dl_view_at(now)`, `now` = CPU cycles); the simulation, its rates and the CGA picture are
+untouched (cycles identical to `--classic`).
+
+**Vertices, not poses.** The scenery switches eye position, angles, local origins (op 24, with a shift) and even
+projection scales (op 0E) many times per frame, so one camera pose per frame cannot re-project it. Instead every
+point the scenery puts into eye space becomes a **vertex** (`DlVtx`): its eye vector in float, in the units of the
+clip and the projection (rotate_point's rows x, 2y, z/2: the view is |x| <= z, |y| <= z), and an **identity**
+(scenery address of the point, + step number, + occurrence in the frame). At the commit each vertex looks for its
+identity in the previous committed frame and keeps that position as `e0` (unless implausibly far: further than
+its own distance). At draw time each vertex is at `e0 + (e - e0) * s`, `s` = time since the commit / time between
+the last two commits (clamped to 0..1), or `1 + s` with `--smooth ahead`; lines are clipped against the view
+pyramid in float, projected with the item's projection set (`DlFrame.pj`, [3167]..[316A] at the time), dots are
+dropped outside, the horizon line is only clipped at a small z, and every polygon whose edges all have vertices is
+rebuilt from its re-projected edges with the same ring builder (`build_rings`) as at record time. Items outside the
+view at that moment get `DL_F_HIDDEN`. Items without vertices (fills, 2D lines, `DL_F_INT` items, leaking
+polygons' CGA boxes, fallback tiles) stay where the frame has them.
+
+**Eye vectors without the game's scaling.** world_to_eye_delta and rotate_point scale every point by its own power
+of two (to fit 16 bits), which changes with distance from frame to frame, so the words cannot be interpolated. The
+float vector is computed from the raw point instead:
+
+| Hook | Where | Does |
+|---|---|---|
+| `dl_eye_delta(pc, start, end, x, y, z)` | `world_to_eye_delta` (`transform.c`, at `store`) | raw point at DS:start (y from the record, or [315B] when only x, z were read: end - start = 4) minus `eye_pos`; pending, with the scaled words it stores |
+| `dl_rotated(pc)` | `rotate_point` (`transform.c`, before the return) | if `xform_in` holds the pending words: vertex = view matrix x the raw delta, identity = point address; otherwise (war planes) the delta as it is, no identity. Registered under the eye words BX, CX, DX |
+| `dl_steps_begin(P, rSI)` | dotted/dashed set-up `f_43B4` (`scenery.c`, end) | the steps start at the second end point (DS:SI-6): its float vector over its words gives the scale of every step point |
+| `dl_step(P)` | `f_4428` (`scenery.c`, end) | step point 31B5.. = words x that scale, identity = opcode address + step number |
+| `dl_line_begin(P)` | `clip_project_line` (`scenery.c`, entry) | looks both ends (310F, 311B, not clipped yet) up by their words; `dl_stage_p2` hands them to the line |
+
+Lines and dots find their vertices by the **eye words**: a point keeps the words rotate_point gave it while it is
+copied around (move start 3133, previous end 3127, cache slots 3288..), so no hook is needed at the copies; the
+latest point with the same words wins. `dl_stage_dot` looks up its x, y, z words the same way; the capture shadow
+keeps the staged vertices (the horizon line), valid only within the frame they were staged in.
+
+**Frame changes.** No interpolation (`dt` = 0) after the first frame, more than 1.5 s between commits (menus,
+pauses, scenery loads), or a change of the view direction / radar view ([059B], [0405]).
+
+**Checks** (`--dl-check`, at exit): `smooth: N frames, T ms apart, P% of V vertices found in the previous frame`
+(96.7-100% in every campaign session) and `re-projected at their own time, K of M items are off by more than 1.5 px`
+(the frame drawn at s = 1 against the recorded floats: 0 in most sessions; the few are long ground-polygon edges
+that start far behind the eye, where the game's fixed-point clip is a few pixels off the float one).
+`--dump-dl` lists `vtx`, `matched`, `t` and `dt` per frame.
+
 ## 7. Later subtasks
 
-- **S3.2 (smooth frame rate)** needs to re-project between simulation frames; it will add the eye-space
-  (pre-projection) endpoints to `DL_LINE`/`DL_DOT`/`DL_POLY` vertices and the eye pose to the frame.
-  The staging hooks already see those words, so only the format grows.
 - **S2.2** fills in the hooks for `war.c` (scope 334A/3308, status line) and `text.c`, using the retained
   screen layer of section 5 (S2.1 did the needles without it, section 6b); the artificial horizon
   (`gauges.c`: `attitude`, span fill 293F, XOR bank dots 5B88/2A3E) is still to do.

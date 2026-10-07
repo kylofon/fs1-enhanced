@@ -4,7 +4,9 @@
  * charges cycles. With dl_on false (--classic, --verify, sharp renderer off) every hook is a no-op.
  *
  * S1.2: the 3D view recorder and its hooks (each engine call is one ENH: display list line).
- * --dump-dl FILE writes the committed frames as text, --dl-check lists back-buffer writers without a hook. */
+ * --dump-dl FILE writes the committed frames as text, --dl-check lists back-buffer writers without a hook.
+ * S3.2: every 3D point gets a vertex (identity + float eye-space vector); lines, dots and the horizon refer to
+ * their vertices, so the back end can re-project the view between two simulation frames (dl_view_at). */
 #ifndef DISPLAYLIST_H
 #define DISPLAYLIST_H
 
@@ -34,6 +36,7 @@ enum {
     DL_F_EMPTY = 8,    /* reserved DL_POLY whose flood fill filled nothing: skip */
     DL_F_LEAK = 16,    /* DL_POLY whose flood fill left its outline (or the outline was open): the box
                           x0,y0-x1,y1 of the changed pixels must be shown from the CGA picture */
+    DL_F_HIDDEN = 32,  /* S3.2: outside the view at the interpolated pose (dl_view_at only): skip */
 };
 
 typedef struct DlPt {
@@ -47,11 +50,14 @@ typedef struct DlItem {
     uint8_t kind;    /* DlKind */
     uint8_t flags;   /* DL_F_* */
     uint16_t colour; /* nibble pair, word pattern or colour byte (see DlKind) */
+    int16_t va, vb;  /* S3.2: vertices (DlFrame.vtx) of a (and b) for DL_LINE, DL_DOT, DL_SKYGROUND; -1 = none */
+    uint8_t pj;      /* S3.2: projection parameter set (DlFrame.pj) of a projected item */
     union {
         struct { DlPt a, b; } line;                              /* DL_LINE, DL_DOT (a) */
         struct { float x, y, w, h; } rect;                       /* DL_FILL, DL_RESTORE */
         struct { DlPt a, b; uint16_t pat_l, pat_r; } sky;        /* DL_SKYGROUND */
-        struct { uint16_t first, count, rings; uint8_t x0, y0, x1, y1; } poly; /* DL_POLY: vertices in DlFrame.verts */
+        struct { uint16_t first, count, rings; uint8_t x0, y0, x1, y1; uint16_t e_from, e_to; } poly; /* DL_POLY: vertices in
+                                                       DlFrame.verts; its outline lines are items e_from..e_to-1 */
         struct { uint16_t off, addr; uint8_t w, h, op; } sprite; /* DL_SPRITE */
         struct { uint16_t desc; uint8_t angle; } needle;         /* DL_NEEDLE */
         struct { uint16_t off, mask; int8_t shift; uint8_t len; char s[40]; } text; /* DL_TEXT */
@@ -60,14 +66,29 @@ typedef struct DlItem {
 
 #define DL_MAX_ITEMS 8192
 #define DL_MAX_VERTS 16384
+#define DL_MAX_VTX 8192
+#define DL_MAX_PJ 8
+
+/* S3.2: a 3D point of the frame. e = eye space in the units of the game's clip and projection (x, 2y, z/2 of
+ * the rotated world delta: the view is |x| <= z, |y| <= z; screen = centre + scale * x / z); e0 = the same
+ * point in the previous committed frame (= e when it was not there). key = scenery address of the point
+ * (+ step number of a dotted/dashed line, + occurrence in the frame); 0 = no identity. */
+typedef struct DlVtx {
+    float e[3], e0[3];
+    uint64_t key;
+} DlVtx;
 
 typedef struct DlFrame {
     DlItem items[DL_MAX_ITEMS];
     DlPt verts[DL_MAX_VERTS];
-    int n_items, n_verts;
+    DlVtx vtx[DL_MAX_VTX];
+    float pj[DL_MAX_PJ][4]; /* projection sets: x scale, y scale, x centre, y centre ([3167]..[316A]) */
+    int n_items, n_verts, n_vtx, n_pj;
     int view_row;    /* screen scan line of view row 0 (row_offsets[0]) */
     uint32_t number; /* commit counter */
     bool incomplete; /* overflow: show this frame from the CGA picture */
+    uint64_t t, dt;  /* S3.2: CPU cycles at the commit, and since the previous commit (0: do not interpolate) */
+    int matched;     /* S3.2: vertices found in the previous frame */
 } DlFrame;
 
 /* ---- state -------------------------------------------------------------------------------- */
@@ -76,6 +97,14 @@ extern bool dl_on; /* recording enabled (--dump-dl / --dl-check; S1.3 adds the s
 
 /* The last committed view frame (NULL before the first commit). */
 const DlFrame *dl_view(void);
+
+/* S3.2 smooth frame rate. The view is drawn at every display frame from the last committed frame with each
+ * vertex moved between its two last simulation positions by the time since the commit (now, CPU cycles):
+ * DL_SMOOTH_ON shows the motion one simulation frame late (interpolation), DL_SMOOTH_AHEAD continues it past
+ * the last frame (extrapolation, no delay). The simulation is untouched. */
+enum { DL_SMOOTH_OFF, DL_SMOOTH_ON, DL_SMOOTH_AHEAD };
+void dl_set_smooth(int mode);
+const DlFrame *dl_view_at(uint64_t now);
 
 /* The back-buffer bytes of the committed frame that the blit copied to B800 (same offsets), for the
  * back end's validity check: a B800 tile that differs from them was overwritten after the blit. */
@@ -122,6 +151,15 @@ void dl_poly_end_(Pc *pc);
 void dl_commit_view_(Pc *pc);
 /* print_str family (textdraw.h): one glyph row word w written at es:di. Only B800 is kept. */
 void dl_text_row_(Pc *pc, uint16_t es, uint16_t di, uint16_t w);
+/* S3.2 vertices. world_to_eye_delta (transform.c) about to store the scaled delta (x, y, z) of the scenery point
+ * at start..end; rotate_point (transform.c) returning the eye words BX, CX, DX: the point's vertex is registered
+ * under those words. Dotted/dashed lines (scenery.c): steps_begin after the set-up (SI = after the end points),
+ * step after each step. clip_project_line (scenery.c): its entry, while 310F/311B are not clipped yet. */
+void dl_eye_delta_(Pc *pc, uint16_t start, uint16_t end, uint16_t x, uint16_t y, uint16_t z);
+void dl_rotated_(Pc *pc);
+void dl_steps_begin_(Pc *pc, uint16_t si);
+void dl_step_(Pc *pc);
+void dl_line_begin_(Pc *pc);
 
 #define DL_HOOK(call) do { if (dl_on) call; } while (0)
 static inline void dl_stage_p1(Pc *pc, bool from_prev, uint16_t sw) { DL_HOOK(dl_stage_p1_(pc, from_prev, sw)); }
@@ -141,5 +179,10 @@ static inline void dl_span_fill(Pc *pc) { DL_HOOK(dl_span_fill_(pc)); }
 static inline void dl_poly_end(Pc *pc) { DL_HOOK(dl_poly_end_(pc)); }
 static inline void dl_commit_view(Pc *pc) { DL_HOOK(dl_commit_view_(pc)); }
 static inline void dl_text_row(Pc *pc, uint16_t es, uint16_t di, uint16_t w) { DL_HOOK(dl_text_row_(pc, es, di, w)); }
+static inline void dl_eye_delta(Pc *pc, uint16_t start, uint16_t end, uint16_t x, uint16_t y, uint16_t z) { DL_HOOK(dl_eye_delta_(pc, start, end, x, y, z)); }
+static inline void dl_rotated(Pc *pc) { DL_HOOK(dl_rotated_(pc)); }
+static inline void dl_steps_begin(Pc *pc, uint16_t si) { DL_HOOK(dl_steps_begin_(pc, si)); }
+static inline void dl_step(Pc *pc) { DL_HOOK(dl_step_(pc)); }
+static inline void dl_line_begin(Pc *pc) { DL_HOOK(dl_line_begin_(pc)); }
 
 #endif

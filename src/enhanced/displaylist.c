@@ -216,6 +216,10 @@ static struct { bool valid; uint16_t sw; DlPt p; } prev_end; /* [3165] and its f
 static struct { bool valid; uint8_t x, y; DlPt p; int16_t v; uint8_t pj; } dot_st;
 static uint32_t build_no; /* commits so far = number of the frame being built */
 static int16_t line_v[2] = { -1, -1 }; /* S3.2: vertices of 310F / 311B at clip_project_line's entry */
+/* S3.3: a line whose ends both have vertices but that never reached the projection (dl_stage_p2) was rejected by
+ * the game's clip as outside the view: kept as a hidden DL_F_OUT line for the world behind the cockpit edge. */
+static struct { bool on; int16_t v[2]; uint16_t colour; bool edge; uint8_t pj; } rej;
+static void rej_flush(void);
 static uint8_t pj_index(Pc *pc);
 static int16_t find_vtx(uint16_t x, uint16_t y, uint16_t z);
 static DlPt p1_pending;
@@ -257,6 +261,7 @@ void dl_stage_p1_(Pc *pc, bool from_prev, uint16_t sw)
 
 void dl_stage_p2_(Pc *pc, uint16_t sw1, uint16_t sw2)
 {
+    rej.on = false; /* projected: drawn or captured */
     st.valid = true;
     st.x0 = (uint8_t)sw1, st.y0 = (uint8_t)(sw1 >> 8);
     st.x1 = (uint8_t)sw2, st.y1 = (uint8_t)(sw2 >> 8);
@@ -525,10 +530,31 @@ void dl_step_(Pc *pc)
         step_vtx(pc);
 }
 
+static void rej_flush(void)
+{
+    if (!rej.on)
+        return;
+    rej.on = false;
+    DlFrame *f = cur();
+    if (f->n_items >= DL_MAX_ITEMS - 512) /* headroom: a rejected line never makes the frame incomplete */
+        return;
+    DlItem *it = add(DL_LINE, (uint8_t)(DL_F_OUT | DL_F_HIDDEN | (rej.edge ? DL_F_EDGE : 0)), rej.colour);
+    if (it)
+        it->va = rej.v[0], it->vb = rej.v[1], it->pj = rej.pj;
+}
+
+#define CAPTURE_MODE 0x30CA
+
 void dl_line_begin_(Pc *pc)
 {
+    rej_flush();
     line_v[0] = find_vtx((uint16_t)s16(pc, 0x310F), (uint16_t)s16(pc, 0x3111), (uint16_t)s16(pc, 0x3113));
     line_v[1] = find_vtx((uint16_t)s16(pc, 0x311B), (uint16_t)s16(pc, 0x311D), (uint16_t)s16(pc, 0x311F));
+    if (line_v[0] >= 0 && line_v[1] >= 0 && d8(pc, CAPTURE_MODE) == 0) {
+        rej.on = true;
+        rej.v[0] = line_v[0], rej.v[1] = line_v[1];
+        rej.colour = d16(pc, DRAW_COLOUR), rej.edge = d8(pc, POLY_MODE) != 0, rej.pj = pj_index(pc);
+    }
 }
 
 /* The projection parameters in force, as an index into the frame's sets. */
@@ -1083,11 +1109,14 @@ static void rings_size(const DlFrame *f, int first, int count, float *area, floa
 
 void dl_poly_end_(Pc *pc)
 {
+    rej_flush();
     int slot = poly_slot;
     poly_slot = -1;
     DlFrame *f = cur();
     if (slot < 0 || slot >= f->n_items || f->items[slot].kind != DL_POLY)
         return;
+    f->items[slot].u.poly.e_from = (uint16_t)poly_edges_from, f->items[slot].u.poly.e_to = (uint16_t)f->n_items;
+    f->items[slot].colour = d8(pc, COLOUR_BYTE); /* S3.3: also for an empty one (its outline may be all outside) */
     if (span_fills == 0) { /* the flood fill filled nothing (night, radar view, or a blocked seed) */
         if (chk_on) {
             int a, b, c, d, n = diff_pixels(pc, poly_snap, &a, &b, &c, &d);
@@ -1103,7 +1132,7 @@ void dl_poly_end_(Pc *pc)
         float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f; /* it may still have marked seed pixels by the outline */
         for (int i = poly_edges_from; i < f->n_items; i++) {
             const DlItem *e = &f->items[i];
-            if (e->kind != DL_LINE || !(e->flags & DL_F_EDGE))
+            if (e->kind != DL_LINE || !(e->flags & DL_F_EDGE) || (e->flags & DL_F_OUT))
                 continue;
             x0 = fminf(x0, fminf(e->u.line.a.x, e->u.line.b.x)), x1 = fmaxf(x1, fmaxf(e->u.line.a.x, e->u.line.b.x));
             y0 = fminf(y0, fminf(e->u.line.a.y, e->u.line.b.y)), y1 = fmaxf(y1, fmaxf(e->u.line.a.y, e->u.line.b.y));
@@ -1120,14 +1149,13 @@ void dl_poly_end_(Pc *pc)
     int n_edges = 0;
     for (int i = poly_edges_from; i < f->n_items && n_edges < MAX_EDGES; i++) {
         const DlItem *e = &f->items[i];
-        if (e->kind != DL_LINE || !(e->flags & DL_F_EDGE))
+        if (e->kind != DL_LINE || !(e->flags & DL_F_EDGE) || (e->flags & DL_F_OUT))
             continue;
         DlPt a = e->u.line.a, b = e->u.line.b;
         seg[n_edges][0] = a, seg[n_edges++][1] = b;
         minx = fminf(minx, fminf(a.x, b.x)), maxx = fmaxf(maxx, fmaxf(a.x, b.x));
         miny = fminf(miny, fminf(a.y, b.y)), maxy = fmaxf(maxy, fmaxf(a.y, b.y));
     }
-    poly->u.poly.e_from = (uint16_t)poly_edges_from, poly->u.poly.e_to = (uint16_t)f->n_items;
     int lx0, ly0, lx1, ly1;
     int total = diff_pixels(pc, poly_snap, &lx0, &ly0, &lx1, &ly1); /* what the outline and the flood fill changed */
     /* Outlines in the scenery's direction (every edge staged) are closed along the border on the side the game
@@ -1154,7 +1182,6 @@ void dl_poly_end_(Pc *pc)
     if (rings < 0)
         rings = build_rings(f, seg, n_edges);
     if (rings) {
-        poly->colour = d8(pc, COLOUR_BYTE);
         poly->u.poly.first = (uint16_t)first;
         poly->u.poly.count = (uint16_t)(f->n_verts - first);
         poly->u.poly.rings = (uint16_t)rings;
@@ -1246,6 +1273,10 @@ static void dump_frame(const DlFrame *f)
                     it->u.sky.b.x, it->u.sky.b.y, it->u.sky.pat_l, it->u.sky.pat_r);
             break;
         case DL_LINE:
+            if (it->flags & DL_F_OUT) {
+                fprintf(dump, "out v=%d,%d col=%04X%s\n", it->va, it->vb, it->colour, it->flags & DL_F_EDGE ? " edge" : "");
+                break;
+            }
             fprintf(dump, "line %.2f,%.2f %.2f,%.2f col=%04X%s%s%s\n", it->u.line.a.x, it->u.line.a.y, it->u.line.b.x,
                     it->u.line.b.y, it->colour, it->flags & DL_F_INT ? " int" : "", it->flags & DL_F_EDGE ? " edge" : "",
                     it->flags & DL_F_CAPTURED ? " cap" : "");
@@ -1337,6 +1368,7 @@ static void match_vertices(Pc *pc, DlFrame *f)
 
 void dl_commit_view_(Pc *pc)
 {
+    rej_flush();
     sync(pc, "blit_view_to_screen");
     DlFrame *f = cur();
     f->view_row = view_row_of(pc);
@@ -1362,7 +1394,7 @@ void dl_commit_view_(Pc *pc)
     committed = true;
     if (chk_on)
         smooth_check();
-    st.valid = prev_end.valid = dot_st.valid = false;
+    st.valid = prev_end.valid = dot_st.valid = rej.on = false;
     poly_slot = sky_mark = -1;
 }
 
@@ -1490,7 +1522,8 @@ static const DlFrame *view_s(const DlFrame *f, float s)
     l->view_row = f->view_row, l->number = f->number, l->incomplete = false, l->t = f->t, l->dt = f->dt;
     for (int i = 0; i < l->n_items; i++) {
         DlItem *it = &l->items[i];
-        if (it->va < 0 || it->va >= f->n_vtx || (it->kind != DL_DOT && (it->vb < 0 || it->vb >= f->n_vtx)))
+        if (it->va < 0 || it->va >= f->n_vtx || (it->kind != DL_DOT && (it->vb < 0 || it->vb >= f->n_vtx)) ||
+            (it->flags & DL_F_OUT))
             continue;
         if (it->kind == DL_LINE) {
             if (!line_at(l, it))
@@ -1513,11 +1546,10 @@ static const DlFrame *view_s(const DlFrame *f, float s)
  * display frame that first showed this view: the CPU cycle counter itself is no clock for this, since the
  * scenery pass is one native step that charges its ~0.2 s at once and the next display frames run no CPU to
  * pay it back, so a commit time measured in cycles lies ahead of the display by up to a whole interval. */
-const DlFrame *dl_view_at(uint64_t now)
+static float view_a(const DlFrame *f, uint64_t now)
 {
-    const DlFrame *f = dl_view();
-    if (!f || f->incomplete || smooth_mode == DL_SMOOTH_OFF || !f->n_vtx)
-        return f;
+    if (smooth_mode == DL_SMOOTH_OFF)
+        return 1.0f;
     static uint32_t shown_no;
     static uint64_t shown_at;
     if (f->number != shown_no || now < shown_at)
@@ -1525,8 +1557,203 @@ const DlFrame *dl_view_at(uint64_t now)
     float a = 1.0f; /* display time since the view first showed, in intervals between the last two views */
     if (f->dt)
         a = fminf(1.0f, (float)(now - shown_at) / (float)f->dt);
-    const DlFrame *l = view_s(f, a);
-    return l;
+    return a;
+}
+
+const DlFrame *dl_view_at(uint64_t now)
+{
+    const DlFrame *f = dl_view();
+    if (!f || f->incomplete || smooth_mode == DL_SMOOTH_OFF || !f->n_vtx)
+        return f;
+    return view_s(f, view_a(f, now));
+}
+
+/* ---- S3.3 the world behind the cockpit's top edge ------------------------------------------------ */
+
+static DlFrame gap_f;
+
+/* The planes (n . e >= 0, for e[2] > 0) of the screen rectangle x0..x1, y0..y1 under projection set p. */
+static void rect_planes(const float *p, float x0, float x1, float y0, float y1, float pl[4][3])
+{
+    const float r[4][3] = { { p[0], 0, p[2] - x0 }, { -p[0], 0, x1 - p[2] }, { 0, p[1], p[3] - y0 }, { 0, -p[1], y1 - p[3] } };
+    memcpy(pl, r, sizeof r);
+}
+
+static float plane_d(const float *n, const float *e) { return n[0] * e[0] + n[1] * e[1] + n[2] * e[2]; }
+
+static bool clip_planes(const float pl[4][3], const float *p, const float *q, float *t0, float *t1)
+{
+    float a = 0, b = 1;
+    for (int i = 0; i < 4; i++) {
+        float fp = plane_d(pl[i], p), fq = plane_d(pl[i], q);
+        if (fp < 0 && fq < 0)
+            return false;
+        if (fp < 0)
+            a = fmaxf(a, fp / (fp - fq));
+        else if (fq < 0)
+            b = fminf(b, fp / (fp - fq));
+    }
+    *t0 = a, *t1 = b;
+    return a < b;
+}
+
+static bool same_vtx(const DlFrame *f, int a, int b)
+{
+    if (a == b)
+        return true;
+    const float *p = f->vtx[a].e, *q = f->vtx[b].e;
+    float d = 0, n = 0;
+    for (int k = 0; k < 3; k++)
+        d += (p[k] - q[k]) * (p[k] - q[k]), n += p[k] * p[k];
+    return d <= 1e-8f * n;
+}
+
+static long gp_why[3]; /* --dl-check: polygons not rebuilt (no vertices, unfilled by the game, open outline) */
+static bool gp_count;
+#define GP_WHY(k) (gp_count ? (void)gp_why[k]++ : (void)0)
+
+/* Polygon it again from its whole outline (drawn and rejected edges), clipped as a 3D polygon: only when the edges
+ * close into loops of vertices. A polygon the game drew something of but did not fill stays unfilled. */
+static bool gap_poly(DlFrame *g, const DlFrame *f, const DlItem *it, float y0, float y1)
+{
+    static int16_t ea[MAX_EDGES], eb[MAX_EDGES];
+    int n = 0, pj = -1;
+    bool drawn = false;
+    for (int i = it->u.poly.e_from; i < it->u.poly.e_to && i < f->n_items; i++) {
+        const DlItem *e = &f->items[i];
+        if (e->kind != DL_LINE || !(e->flags & DL_F_EDGE))
+            continue;
+        if (e->va < 0 || e->vb < 0 || e->va >= f->n_vtx || e->vb >= f->n_vtx || n >= MAX_EDGES || e->pj >= f->n_pj)
+            return GP_WHY(0), false;
+        if (pj < 0)
+            pj = e->pj;
+        drawn |= !(e->flags & DL_F_OUT);
+        ea[n] = e->va, eb[n++] = e->vb;
+    }
+    if (n < 3 || ((it->flags & DL_F_EMPTY) && drawn))
+        return GP_WHY(1), false;
+    float pl[4][3];
+    rect_planes(f->pj[pj], 0, VIEW_W, y0, y1, pl);
+    static bool used[MAX_EDGES];
+    static float ring_a[MAX_EDGES + 8][3], ring_b[MAX_EDGES + 8][3];
+    memset(used, 0, (size_t)n * sizeof *used);
+    int first = g->n_verts, rings = 0;
+    for (int s0 = 0; s0 < n; s0++) { /* loops: each edge's end is the next edge's start */
+        if (used[s0])
+            continue;
+        int m = 0, c = s0;
+        for (;;) {
+            used[c] = true;
+            memcpy(ring_a[m++], lerp_v[ea[c]], sizeof ring_a[0]);
+            if (same_vtx(f, eb[c], ea[s0]))
+                break;
+            int next = -1;
+            for (int k = 0; k < n && next < 0; k++) {
+                int j = (c + 1 + k) % n;
+                if (!used[j] && same_vtx(f, ea[j], eb[c]))
+                    next = j;
+            }
+            if (next < 0) {
+                g->n_verts = first;
+                return GP_WHY(2), false; /* an open outline */
+            }
+            c = next;
+        }
+        for (int i = 0; i < 4 && m > 0; i++) { /* Sutherland-Hodgman in eye space */
+            int k = 0;
+            for (int j = 0; j < m; j++) {
+                const float *p = ring_a[j], *q = ring_a[(j + 1) % m];
+                float fp = plane_d(pl[i], p), fq = plane_d(pl[i], q);
+                if (fp >= 0)
+                    memcpy(ring_b[k++], p, sizeof ring_b[0]);
+                if ((fp >= 0) != (fq >= 0) && k < MAX_EDGES + 8)
+                    at(p, q, fp / (fp - fq), ring_b[k++]);
+                if (k >= MAX_EDGES + 7)
+                    break;
+            }
+            memcpy(ring_a, ring_b, (size_t)k * sizeof ring_a[0]);
+            m = k;
+        }
+        int from = g->n_verts;
+        for (int j = 0; j < m; j++) {
+            DlPt pt;
+            if (project_e(f, pj, ring_a[j], &pt))
+                vert_to(g, pt);
+        }
+        if (g->n_verts - from < 3) {
+            g->n_verts = from;
+            continue;
+        }
+        rings++;
+        vert_to(g, (DlPt){ DL_RING_BREAK_X, 0 });
+    }
+    if (g->n_verts > first && isnan(g->verts[g->n_verts - 1].x))
+        g->n_verts--;
+    if (!rings)
+        return false;
+    DlItem *o = &g->items[g->n_items++];
+    *o = *it;
+    o->flags = 0;
+    o->u.poly.first = (uint16_t)first, o->u.poly.count = (uint16_t)(g->n_verts - first), o->u.poly.rings = (uint16_t)rings;
+    return true;
+}
+
+static long gp_frames, gp_polys, gp_closed, gp_lines, gp_out; /* --dl-check */
+
+static const DlFrame *gap_s(const DlFrame *f, float s, float y0, float y1)
+{
+    for (int i = 0; i < f->n_vtx; i++)
+        for (int k = 0; k < 3; k++)
+            lerp_v[i][k] = f->vtx[i].e0[k] + (f->vtx[i].e[k] - f->vtx[i].e0[k]) * s;
+    DlFrame *g = &gap_f;
+    memcpy(g->pj, f->pj, sizeof g->pj);
+    g->n_items = g->n_verts = g->n_vtx = 0, g->n_pj = f->n_pj;
+    g->view_row = f->view_row, g->number = f->number, g->incomplete = false;
+    for (int i = 0; i < f->n_items && g->n_items < DL_MAX_ITEMS; i++) {
+        const DlItem *it = &f->items[i];
+        if (it->kind == DL_POLY) {
+            bool closed = gap_poly(g, f, it, y0, y1);
+            if (gp_count && it->u.poly.e_to > it->u.poly.e_from)
+                gp_polys++, gp_closed += closed;
+            continue;
+        }
+        if ((it->kind != DL_LINE && it->kind != DL_DOT) || it->va < 0 || it->va >= f->n_vtx || it->pj >= f->n_pj)
+            continue;
+        float pl[4][3];
+        rect_planes(f->pj[it->pj], 0, VIEW_W, y0, y1, pl);
+        DlItem o = *it;
+        o.flags &= (uint8_t)~(DL_F_HIDDEN | DL_F_OUT);
+        if (it->kind == DL_DOT) {
+            const float *e = lerp_v[it->va];
+            bool in = true;
+            for (int k = 0; k < 4; k++)
+                in &= plane_d(pl[k], e) >= 0;
+            if (!in || !project_e(f, it->pj, e, &o.u.line.a))
+                continue;
+        } else {
+            if (it->vb < 0 || it->vb >= f->n_vtx)
+                continue;
+            const float *p = lerp_v[it->va], *q = lerp_v[it->vb];
+            float t0, t1, a[3], b[3];
+            if (!clip_planes(pl, p, q, &t0, &t1))
+                continue;
+            at(p, q, t0, a), at(p, q, t1, b);
+            if (!project_e(f, it->pj, a, &o.u.line.a) || !project_e(f, it->pj, b, &o.u.line.b))
+                continue;
+        }
+        g->items[g->n_items++] = o;
+        if (gp_count && it->kind == DL_LINE)
+            gp_lines++, gp_out += (it->flags & DL_F_OUT) != 0;
+    }
+    return g->incomplete ? NULL : g;
+}
+
+const DlFrame *dl_gap_at(uint64_t now, float y0, float y1)
+{
+    const DlFrame *f = dl_view();
+    if (!f || f->incomplete || !f->n_vtx)
+        return NULL;
+    return gap_s(f, view_a(f, now), y0, y1);
 }
 
 /* --dl-check: the frame re-projected at its own time must give the recorded positions back. */
@@ -1542,6 +1769,10 @@ static float dist_line(DlPt p, DlPt a, DlPt b) /* distance of p from the infinit
 static void smooth_check(void)
 {
     const DlFrame *f = dl_view();
+    gp_count = true;
+    if (f && !f->incomplete && f->n_vtx && gap_s(f, 1.0f, VIEW_H - 2, VIEW_H + 12)) /* S3.3: the band of the stock corner */
+        gp_frames++;
+    gp_count = false;
     game_eye = true;
     const DlFrame *l = view_s(f, 1.0f);
     game_eye = false;
@@ -1560,7 +1791,7 @@ static void smooth_check(void)
             if (fabsf(a1 - a0) > 0.05f * a0 + p0)
                 sc_poly_off++;
         }
-        if (o->va < 0 || o->kind == DL_POLY)
+        if (o->va < 0 || o->kind == DL_POLY || (o->flags & DL_F_OUT))
             continue;
         sc_items++;
         if (n->flags & DL_F_HIDDEN) {
@@ -1581,6 +1812,11 @@ static void smooth_check(void)
 
 static void sm_report(void)
 {
+    if (gp_frames)
+        fprintf(stderr, "gap: %ld frames, per frame %.1f lines in the band under the view (%.1f rejected by the game), "
+                        "%ld of %ld polygons in it (not rebuilt: %ld without vertices, %ld drawn but not filled by the game, "
+                        "%ld open)\n", gp_frames, (double)gp_lines / (double)gp_frames,
+                (double)gp_out / (double)gp_frames, gp_closed, gp_polys, gp_why[0], gp_why[1], gp_why[2]);
     if (sc_items)
         fprintf(stderr, "smooth: re-projected at their own time, %ld of %ld items are off by more than 1.5 px (max %.1f), %ld hidden\n",
                 sc_off, sc_items, sc_max, sc_hidden);

@@ -286,6 +286,46 @@ pauses, scenery loads), or a change of the view direction / radar view ([059B], 
 that start far behind the eye, where the game's fixed-point clip is a few pixels off the float one).
 `--dump-dl` lists `vtx`, `matched`, `t` and `dt` per frame.
 
+## 6e. The world behind the cockpit edge, S3.3 as built
+
+With the frame module drawn as vectors, the gap between the view (rows 0..105) and the panel's top edge (the black
+line 106 and the top-left corner above the glareshield curve, down to line 117) shows the 3D world, not only the
+sky/ground split (S2.19).
+
+**The edge.** `cockpit_begin` turns the first lit line of each column of the clean panel (dotted gaps filled) into a
+polyline through the middle of each pixel step (`cockpit_gap_curve`, hi-res x / scan line of the line's centre), the
+flat top line (107) from where the curve meets it. The frame module drops the clean image's pixels within 1.25 lines of
+the curve (left of the flat line) and draws the curve as one grey line instead of the old pixel staircase; the gap is
+bounded by the same polyline (fill down to its centre + 0.5, under the line).
+
+**Rejected lines.** A line whose two ends have vertices at `clip_project_line`'s entry but that never reaches
+`dl_stage_p2` (projection) was rejected by the game's clip: the next `dl_line_begin`, `dl_poly_end` or the commit adds it
+as a `DL_LINE` with `DL_F_OUT | DL_F_HIDDEN` (+ `DL_F_EDGE` in polygon mode), the vertices, colour and projection set it
+had (none in capture mode; not added when fewer than 512 item slots are left, so it never makes a frame incomplete).
+No engine hook. The view itself ignores these items (`view_s`, `dl_poly_end`, the checks skip them), so the view and
+every `--dl-check` number are as before. A `DL_POLY` now always gets `e_from`/`e_to` and its colour, also when its fill
+filled nothing.
+
+**The gap frame** (`dl_gap_at(now, y0, y1)`, `gap_s`): the vertices at the same time as `dl_view_at`; the frustum is the
+screen rectangle x 0..160, y `y0`..`y1` (view units, below the view) as four planes per projection set
+(`rect_planes`: e.g. sy <= y1 is -p1*ey + (y1 - p3)*ez >= 0). Lines (drawn and rejected) are clipped in 3D, dots
+kept inside. A polygon's edges (drawn + rejected, in the scenery's direction) are chained end to start by vertex
+(same index or the same eye vector) into loops; each loop is clipped as a 3D polygon (Sutherland-Hodgman) and
+projected, so no border stitching or winding is needed. Not rebuilt: an open outline (none in the campaign flights),
+an edge without vertices, a polygon the game drew part of but did not fill (it stays unfilled, as in the view).
+
+**Drawing** (`gap_draw`, before the view): the sky/ground split (or the view's full fill when there is no horizon) over
+the gap's box from view row 105, then the gap frame's polygons, lines and dots in order; the batch is cut in software
+to one convex band per piece of the edge polyline (`flush_gap`; a clip rectangle cannot follow the curve), so nothing
+lands on the panel. The view is drawn over it.
+
+**Checks.** `--dl-check` adds `gap: N frames, per frame L lines in the band under the view (R rejected by the game),
+P of Q polygons in it (not rebuilt: …)` for the band 104..118 at the frame's own time. Demo flight: 1.1 lines (0.3
+rejected), 267 of 436 polygons, 35 not rebuilt (exactly the 35 the game did not fill), 0 open. Runway start: 92 of 92.
+
+**Known limit.** Scenery blocks the game culls before drawing (out of view as a whole) are not in the frame, so they
+cannot appear in the gap.
+
 ## 7. Later subtasks
 
 - **S2.2** fills in the hooks for `war.c` (scope 334A/3308, status line) and `text.c`, using the retained

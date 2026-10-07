@@ -73,7 +73,10 @@ bool cockpit_clean_lit(const uint8_t *clean, int x, int line)
     return clean[(line & 1) * 0x2000 + (line >> 1) * 80 + (x >> 3)] >> (7 - (x & 7)) & 1;
 }
 
-static int gap_y[640];
+#define MAX_CURVE 96
+static float curve[MAX_CURVE][2]; /* S3.3: the gap's bottom (hi-res x, scan line), x from 0 to 640 */
+static int n_curve;
+static float curve_flat_x; /* where the curve meets the flat top line */
 static bool gap_on;
 
 void cockpit_begin(const Pc *pc, const uint8_t *clean)
@@ -100,16 +103,58 @@ void cockpit_begin(const Pc *pc, const uint8_t *clean)
                 m = raw[x + d];
         solid[x] = m;
     }
-    for (int x = 0; x < 640; x++) { /* up to and including the frame line: under a step, the lowest neighbour */
-        int m = solid[x];
-        for (int d = -1; d <= 1; d++)
-            if (x + d >= 0 && x + d < 640 && solid[x + d] > m)
-                m = solid[x + d];
-        gap_y[x] = m + 1;
+    /* S3.3: the staircase of the glareshield curve as a smooth line through the middle of each step (centre of
+     * its scan line); the flat top line (the highest level) from where the curve meets it to the right edge */
+    int flat = solid[0];
+    for (int x = 1; x < 640; x++)
+        if (solid[x] < flat)
+            flat = solid[x];
+    n_curve = 0;
+    curve_flat_x = 640;
+    for (int x = 0; x < 640 && n_curve < MAX_CURVE - 2;) {
+        int e = x + 1;
+        while (e < 640 && solid[e] == solid[x])
+            e++;
+        float y = (float)solid[x] + 0.5f;
+        if (solid[x] == flat) {
+            if (x == 0 || curve[n_curve - 1][1] != y) /* a flat stretch: both ends */
+                curve[n_curve][0] = (float)x, curve[n_curve++][1] = y;
+            if (curve_flat_x == 640)
+                curve_flat_x = (float)x;
+            curve[n_curve][0] = (float)e, curve[n_curve++][1] = y;
+        } else {
+            if (x == 0)
+                curve[n_curve][0] = 0, curve[n_curve++][1] = y;
+            curve[n_curve][0] = (float)(x + e) * 0.5f, curve[n_curve++][1] = y;
+            if (e == 640)
+                curve[n_curve][0] = 640, curve[n_curve++][1] = y;
+        }
+        x = e;
     }
 }
 
-int cockpit_gap_bottom(int x) { return active && gap_on && x >= 0 && x < 640 ? gap_y[x] : -1; }
+int cockpit_gap_curve(const float (**pts)[2], float *flat_x)
+{
+    if (!active || !gap_on)
+        return 0;
+    *pts = curve;
+    if (flat_x)
+        *flat_x = curve_flat_x;
+    return n_curve;
+}
+
+float cockpit_curve_y(float x)
+{
+    if (!n_curve)
+        return -1;
+    for (int i = 1; i < n_curve; i++)
+        if (x <= curve[i][0] || i == n_curve - 1) {
+            float x0 = curve[i - 1][0], x1 = curve[i][0], t = x1 > x0 ? (x - x0) / (x1 - x0) : 0;
+            t = t < 0 ? 0 : t > 1 ? 1 : t;
+            return curve[i - 1][1] + (curve[i][1] - curve[i - 1][1]) * t;
+        }
+    return curve[0][1];
+}
 
 bool cockpit_in_module(int x, int line)
 {

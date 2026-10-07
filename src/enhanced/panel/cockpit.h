@@ -66,9 +66,13 @@ bool cockpit_clean_lit(const uint8_t *clean, int x, int line);
 /* True if (x, line) is inside the rect of an ordinary (non-rest) module, drawn or not. */
 bool cockpit_in_module(int x, int line);
 
-/* The first line of the panel's frame in column x of the panel (the sky and ground may be drawn from the view's bottom to
- * there: the strip under the view and the corner above the glareshield curve), or -1 when the frame module is not drawn. */
-int cockpit_gap_bottom(int x);
+/* S3.3: the top edge of the panel's frame as a smooth line (the glareshield curve's pixel steps joined through their
+ * middles, then the flat top line): *pts = n points (hi-res x, scan line of the line's centre) from x 0 to 640,
+ * *flat_x = where the curve meets the flat line. The 3D world may be drawn from the view's bottom down to it (the strip
+ * under the view and the corner above the curve). Returns 0 when the frame module is not drawn. */
+int cockpit_gap_curve(const float (**pts)[2], float *flat_x);
+/* The line's centre at hi-res x (last curve built; -1 before the first). */
+float cockpit_curve_y(float x);
 
 /* Called by sharp_view: draws the drawn modules (and outlines), if the panel was on this frame. */
 void cockpit_draw(SDL_Renderer *r);

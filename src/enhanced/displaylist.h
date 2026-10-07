@@ -37,6 +37,8 @@ enum {
     DL_F_LEAK = 16,    /* DL_POLY whose flood fill left its outline (or the outline was open): the box
                           x0,y0-x1,y1 of the changed pixels must be shown from the CGA picture */
     DL_F_HIDDEN = 32,  /* S3.2: outside the view at the interpolated pose (dl_view_at only): skip */
+    DL_F_OUT = 64,     /* S3.3: a line the game's clip rejected as outside the view (not drawn; always DL_F_HIDDEN):
+                          kept with its vertices for the world behind the cockpit edge (dl_gap_at) */
 };
 
 typedef struct DlPt {
@@ -114,6 +116,13 @@ const DlFrame *dl_view(void);
 enum { DL_SMOOTH_OFF, DL_SMOOTH_ON };
 void dl_set_smooth(int mode);
 const DlFrame *dl_view_at(uint64_t now);
+
+/* S3.3 the 3D world behind the cockpit's top edge: the scenery of the committed frame at the same time as dl_view_at,
+ * re-projected into the screen band y0..y1 (view units; below the view: y1 > 106) instead of the game's view pyramid.
+ * Lines (also those the game rejected as outside, DL_F_OUT) and dots are clipped in 3D; a polygon whose outline (drawn
+ * and rejected edges) closes in 3D is clipped as a 3D polygon. Only DL_LINE, DL_DOT and DL_POLY items, none hidden.
+ * NULL when the frame has no vertices. Scenery the game culls before drawing (whole blocks) is not in it. */
+const DlFrame *dl_gap_at(uint64_t now, float y0, float y1);
 
 /* The back-buffer bytes of the committed frame that the blit copied to B800 (same offsets), for the
  * back end's validity check: a B800 tile that differs from them was overwritten after the blit. */

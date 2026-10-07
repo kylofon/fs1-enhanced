@@ -3,12 +3,14 @@
  * tracks of the aileron and rudder indicators). It is read from the clean image, once per image:
  *   - horizontal runs (a single missing pixel allowed, so dotted lines count) of 12+ pixels become lines,
  *   - then vertical runs of 8+ pixels,
- *   - what is left (the glareshield's curves) becomes crisp pixel runs on the hi-res grid.
+ *   - what is left becomes crisp pixel runs on the hi-res grid.
+ * The glareshield curve (the pixel steps at the top left) is taken out first and drawn as one smooth line (S3.3).
  * Dotted runs are drawn grey, solid ones white. Also draws the aileron marker (descriptor DS:143D, a triangle
  * pointing down at the track on line 160); the rudder marker is drawn by the modules above the bottom track. */
 #include "enhanced/panel/frame.h"
 #include "enhanced/panel/kit.h"
 
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -29,6 +31,10 @@ static Seg *segs;
 static Run *runs;
 static int n_segs, n_runs, cap_segs, cap_runs;
 static uint32_t built_hash;
+#define MAX_CURVE 96
+static float curve[MAX_CURVE][2];
+static int n_curve;
+static float flat_x;
 static bool built;
 
 static bool lit(const uint8_t *img, int x, int y) { return x >= 0 && x < W && cockpit_clean_lit(img, x, y); }
@@ -59,6 +65,16 @@ static void build(const uint8_t *img)
     for (int y = Y0; y < H; y++)
         for (int x = 0; x < W; x++)
             mask[y][x] = lit(img, x, y) && !cockpit_in_module(x, y);
+    /* S3.3: the glareshield curve's pixel steps are drawn as one smooth line (cockpit_gap_curve), not as pixels */
+    const float(*pts)[2];
+    n_curve = cockpit_gap_curve(&pts, &flat_x);
+    if (n_curve > MAX_CURVE)
+        n_curve = MAX_CURVE;
+    memcpy(curve, pts, (size_t)n_curve * sizeof *curve);
+    for (int x = 0; x < flat_x && n_curve; x++)
+        for (int y = Y0; y < H; y++)
+            if (mask[y][x] && fabsf((float)y + 0.5f - cockpit_curve_y((float)x + 0.5f)) <= 1.25f)
+                mask[y][x] = 0;
 
     for (int y = Y0; y < H; y++) { /* horizontal runs, one gap allowed */
         for (int x = 0; x < W; x++) {
@@ -127,6 +143,8 @@ void frame_draw(const CockpitFrame *f, const CockpitModule *m)
         /* a pixel-wide run: lines are drawn from end to end, without the cap kit_line adds */
         kit_needle(s->x0, s->y0, s->x1, s->y1, w, w, s->dotted ? kit_grey : kit_white);
     }
+    for (int i = 0; i + 1 < n_curve && curve[i][0] < flat_x; i++) /* the curve, dotted in the original: grey */
+        kit_line(curve[i][0], curve[i][1], curve[i + 1][0], curve[i + 1][1], 2.4f, kit_grey);
     for (int i = 0; i < n_runs; i++)
         kit_fill_box((float)runs[i].x0, (float)runs[i].y, (float)runs[i].x1 + 1.0f, (float)runs[i].y + 1.0f, kit_white);
 

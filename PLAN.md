@@ -35,7 +35,7 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 ## Status
 
 - **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending), S2.4 (U1 pending), S2.5, S2.6 (U1 pending), S2.7 (U1 pending), S2.8 (U1 pending), S2.9 (U1 pending), S2.10-S2.19 (U1 pending), S3.2 (U1 pending).
-- **Next:** U1 checks (rows at the top); then Phase 4 (S4.1).
+- **Next:** U1 checks (rows at the top); S3.3 (scenery behind the cockpit edge, asked for 2026-10-07); then Phase 4 (S4.1).
 - Escalation rule: a subtask that fails twice on Sonnet → new Opus session with a 5-line note
   (symptom, file, what was tried). Never carry an old transcript over.
 
@@ -119,6 +119,7 @@ a time. Every module subtask: measure the layout from the clean panel (cseg:0122
 |---|---|---|---|---|
 | S3.1 | ~~Widescreen~~ dropped (D3): keep 4:3, letterbox/pillarbox at any window size, integer or smooth scaling option | S | S | dropped 2026-10-03 |
 | S3.2 | Smooth frame rate: run the simulation at the original rates, render the 3D view every display frame with interpolated eye position/attitude from the display list; no sim behaviour change | O | L | done 2026-10-07, U1 pending |
+| S3.3 | Scenery behind the cockpit edge: the strip under the view and the top-left corner above the glareshield show the 3D world, not only sky/ground fill. With S3.2 vertices the back end re-projects the scenery itself: clip against a frustum extended down to the lowest gap line (instead of the game's view pyramid), record the outline edges the game rejects as outside (seen at `clip_project_line` entry, no draw) so polygons such as the lake close correctly below the view, draw the extension clipped to the gap area; the glareshield curve drawn as a smooth line and the gap bounded by it (no pixel staircase). Scenery blocks the game culls as out of view stay missing there (known limit). No sim change; **U1 check** | O | M | |
 
 ### Phase 4 — Input
 | Id | Task | Model | Size | Status |

@@ -56,8 +56,10 @@ typedef struct DlItem {
         struct { DlPt a, b; } line;                              /* DL_LINE, DL_DOT (a) */
         struct { float x, y, w, h; } rect;                       /* DL_FILL, DL_RESTORE */
         struct { DlPt a, b; uint16_t pat_l, pat_r; } sky;        /* DL_SKYGROUND */
-        struct { uint16_t first, count, rings; uint8_t x0, y0, x1, y1; uint16_t e_from, e_to; } poly; /* DL_POLY: vertices in
-                                                       DlFrame.verts; its outline lines are items e_from..e_to-1 */
+        struct { uint16_t first, count, rings; uint8_t x0, y0, x1, y1; uint16_t e_from, e_to; int8_t wind; } poly; /* DL_POLY: vertices in
+                                                       DlFrame.verts; its outline lines are items e_from..e_to-1;
+                                                       wind: side a clipped outline is closed along the border
+                                                       (+1 clockwise, -1 the other way, 0 joined by nearness) */
         struct { uint16_t off, addr; uint8_t w, h, op; } sprite; /* DL_SPRITE */
         struct { uint16_t desc; uint8_t angle; } needle;         /* DL_NEEDLE */
         struct { uint16_t off, mask; int8_t shift; uint8_t len; char s[40]; } text; /* DL_TEXT */
@@ -99,10 +101,11 @@ extern bool dl_on; /* recording enabled (--dump-dl / --dl-check; S1.3 adds the s
 const DlFrame *dl_view(void);
 
 /* S3.2 smooth frame rate. The view is drawn at every display frame from the last committed frame with each
- * vertex moved between its two last simulation positions by the time since the commit (now, CPU cycles):
- * DL_SMOOTH_ON shows the motion one simulation frame late (interpolation), DL_SMOOTH_AHEAD continues it past
- * the last frame (extrapolation, no delay). The simulation is untouched. */
-enum { DL_SMOOTH_OFF, DL_SMOOTH_ON, DL_SMOOTH_AHEAD };
+ * vertex moved between its two last simulation positions by the display time since the view first showed (now:
+ * the emulated time the display frame stands for), so the motion is shown one simulation frame late. (Continuing
+ * the motion past the last frame instead, without the delay, was tried and looked bad in play.) The simulation
+ * is untouched. */
+enum { DL_SMOOTH_OFF, DL_SMOOTH_ON };
 void dl_set_smooth(int mode);
 const DlFrame *dl_view_at(uint64_t now);
 

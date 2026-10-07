@@ -526,8 +526,8 @@ void dl_line_(Pc *pc, int x0, int y0, int x1, int y1, uint16_t seg)
         a = st.p1, b = st.p2;
         va = st.v1, vb = st.v2;
     } else if (in_range && st.valid && st.x0 == x1 && st.y0 == y1 && st.x1 == x0 && st.y1 == y0) {
-        a = st.p2, b = st.p1;
-        va = st.v2, vb = st.v1;
+        a = st.p1, b = st.p2; /* drawn from its far end: kept in the scenery's direction (outlines run one way) */
+        va = st.v1, vb = st.v2;
     } else {
         a.x = (float)x0 + 0.5f, a.y = (float)y0 + 0.5f;
         b.x = (float)x1 + 0.5f, b.y = (float)y1 + 0.5f;
@@ -855,6 +855,187 @@ static int build_rings(DlFrame *f, DlPt (*seg)[2], int n_edges)
     return rings;
 }
 
+/* Position of a border point along the view border, clockwise on the screen from the top left corner (the
+ * scenery's clip rectangle is x 1..159, y 1..105; the corners are taken at the view's own corners). */
+#define PERIM (2.0f * (VIEW_W + VIEW_H))
+static float border_t(DlPt p)
+{
+    float d[4] = { fabsf(p.y - 1), fabsf(p.x - (VIEW_W - 1)), fabsf(p.y - (VIEW_H - 1)), fabsf(p.x - 1) };
+    int k = 0;
+    for (int i = 1; i < 4; i++)
+        if (d[i] < d[k])
+            k = i;
+    float x = fminf(fmaxf(p.x, 0), VIEW_W), y = fminf(fmaxf(p.y, 0), VIEW_H);
+    switch (k) {
+    case 0: return x;                                   /* top, left to right */
+    case 1: return VIEW_W + y;                          /* right, downwards */
+    case 2: return VIEW_W + VIEW_H + (VIEW_W - x);      /* bottom, right to left */
+    default: return 2 * VIEW_W + VIEW_H + (VIEW_H - y); /* left, upwards */
+    }
+}
+
+/* Directed outline segments (the scenery's order) into rings: chains joined end to start; a chain cut by the
+ * clip rectangle is continued along the view border in direction wind (+1 clockwise on the screen, -1 the other
+ * way) to the next chain's start, as the flood fill fills the polygon's side up to the border. Returns the
+ * number of rings, or -1 when a chain does not end on the border (then build_rings is used). */
+static int stitch_rings(DlFrame *f, DlPt (*seg)[2], int n_edges, int wind)
+{
+    enum { MAX_CHAINS = 64, SCRATCH = 4096 };
+    static DlPt scratch[SCRATCH];
+    struct Chain { DlPt *p; int n; bool open, used; float t_in, t_out; } ch[MAX_CHAINS];
+    bool used[MAX_EDGES] = { false };
+    int n_ch = 0, sc = 0, first = f->n_verts, rings = 0;
+    for (int s0 = 0; s0 < n_edges; s0++) {
+        if (used[s0])
+            continue;
+        if (n_ch >= MAX_CHAINS)
+            return -1;
+        used[s0] = true;
+        DlPt chain[2 * MAX_EDGES + 2];
+        int lo = MAX_EDGES, hi = MAX_EDGES + 1;
+        chain[lo] = seg[s0][0], chain[hi] = seg[s0][1];
+        for (bool grew = true; grew;) {
+            grew = false;
+            for (int k = 0; k < n_edges; k++) {
+                if (used[k] || near_pt(chain[hi], chain[lo]))
+                    continue;
+                if (near_pt(chain[hi], seg[k][0]))
+                    chain[++hi] = seg[k][1];
+                else if (near_pt(chain[lo], seg[k][1]))
+                    chain[--lo] = seg[k][0];
+                else
+                    continue;
+                used[k] = grew = true;
+            }
+        }
+        int n = hi - lo + 1;
+        if (sc + n > SCRATCH)
+            return -1;
+        memcpy(&scratch[sc], &chain[lo], (size_t)n * sizeof(DlPt));
+        struct Chain *c = &ch[n_ch++];
+        *c = (struct Chain){ &scratch[sc], n, !near_pt(chain[lo], chain[hi]), false, 0, 0 };
+        sc += n;
+        if (c->open) {
+            if (!border_side(c->p[0]) || !border_side(c->p[n - 1]))
+                return -1;
+            c->t_in = border_t(c->p[0]), c->t_out = border_t(c->p[n - 1]);
+        }
+    }
+    static const DlPt corner[4] = { { 0, 0 }, { VIEW_W, 0 }, { VIEW_W, VIEW_H }, { 0, VIEW_H } };
+    static const float corner_t[4] = { 0, VIEW_W, VIEW_W + VIEW_H, 2 * VIEW_W + VIEW_H };
+    for (int c0 = 0; c0 < n_ch; c0++) {
+        if (ch[c0].used)
+            continue;
+        int from = f->n_verts;
+        if (!ch[c0].open) { /* a whole ring */
+            ch[c0].used = true;
+            for (int k = 0; k + 1 < ch[c0].n; k++)
+                vert_to(f, ch[c0].p[k]);
+        } else {
+            for (int c = c0, guard = 0; guard <= n_ch; guard++) {
+                ch[c].used = true;
+                for (int k = 0; k < ch[c].n; k++)
+                    vert_to(f, ch[c].p[k]);
+                float te = ch[c].t_out, best = 1e30f; /* along the border to the nearest chain start */
+                int next = -1;
+                for (int j = 0; j < n_ch; j++) {
+                    if (!ch[j].open || (ch[j].used && j != c0))
+                        continue;
+                    float d = wind > 0 ? ch[j].t_in - te : te - ch[j].t_in;
+                    d = fmodf(d + 2 * PERIM, PERIM);
+                    if (d < best)
+                        best = d, next = j;
+                }
+                { /* the corners passed on the way, in order */
+                    float ds[4];
+                    int ord[4];
+                    for (int i = 0; i < 4; i++) {
+                        float d = wind > 0 ? corner_t[i] - te : te - corner_t[i];
+                        ds[i] = fmodf(d + 2 * PERIM, PERIM), ord[i] = i;
+                    }
+                    for (int i = 0; i < 4; i++)
+                        for (int j = i + 1; j < 4; j++)
+                            if (ds[ord[j]] < ds[ord[i]]) {
+                                int t = ord[i];
+                                ord[i] = ord[j], ord[j] = t;
+                            }
+                    for (int i = 0; i < 4; i++)
+                        if (ds[ord[i]] > 0 && ds[ord[i]] < best)
+                            vert_to(f, corner[ord[i]]);
+                }
+                if (next < 0 || next == c0)
+                    break;
+                c = next;
+            }
+        }
+        float a2 = 0;
+        for (int j = from; j < f->n_verts; j++) {
+            DlPt p = f->verts[j], q = f->verts[j + 1 < f->n_verts ? j + 1 : from];
+            a2 += p.x * q.y - q.x * p.y;
+        }
+        if (f->n_verts - from < 3 || fabsf(a2) < 1.0f) {
+            f->n_verts = from;
+            continue;
+        }
+        rings++;
+        vert_to(f, (DlPt){ DL_RING_BREAK_X, 0 });
+    }
+    if (f->n_verts > first && isnan(f->verts[f->n_verts - 1].x))
+        f->n_verts--;
+    return rings;
+}
+
+/* How badly the rings at verts[first..first+count) cover what the outline and the flood fill changed (against
+ * poly_snap): their area that did not change plus the changed pixels outside them. */
+static void rings_size(const DlFrame *f, int first, int count, float *area, float *perim);
+static float fill_mismatch(Pc *pc, const DlFrame *f, int first, int count)
+{
+    const uint8_t *buf = pc->cpu.mem + cpu_linear(view_seg(pc), 0);
+    const DlPt *v = f->verts + first;
+    int score = 0, n_in = 0;
+    for (int y = 0; y < VIEW_H; y++) {
+        int base = row_off(pc, y);
+        for (int x = 0; x < VIEW_W; x++) {
+            int o = base + x / 2;
+            if (o >= BUF_SIZE || !((buf[o] ^ poly_snap[o]) & (x & 1 ? 0x0F : 0xF0)))
+                continue;
+            float px = (float)x + 0.5f, py = (float)y + 0.5f;
+            bool in = false; /* even-odd over all rings */
+            for (int k = 0, from = 0; k <= count; k++) {
+                if (k < count && !isnan(v[k].x))
+                    continue;
+                for (int i = from, j = k - 1; i < k; j = i++)
+                    if ((v[i].y > py) != (v[j].y > py) && px < v[j].x + (v[i].x - v[j].x) * (py - v[j].y) / (v[i].y - v[j].y))
+                        in = !in;
+                from = k + 1;
+            }
+            score += in ? 1 : -1;
+            n_in += in;
+        }
+    }
+    float area, perim;
+    rings_size(f, first, count, &area, &perim);
+    return area - (float)n_in + (float)(n_in - score); /* n_in - score = the changed pixels outside */
+}
+
+/* Area and perimeter (in fat pixels along the major axis) of the rings at verts[first..first+count). */
+static void rings_size(const DlFrame *f, int first, int count, float *area, float *perim)
+{
+    *area = *perim = 0;
+    for (int k = 0, from = 0; k <= count; k++) {
+        if (k == count || isnan(f->verts[first + k].x)) {
+            float a2 = 0;
+            for (int j = from; j < k; j++) {
+                DlPt p = f->verts[first + j], q = f->verts[first + (j + 1 < k ? j + 1 : from)];
+                a2 += p.x * q.y - q.x * p.y;
+                *perim += fabsf(p.x - q.x) > fabsf(p.y - q.y) ? fabsf(p.x - q.x) : fabsf(p.y - q.y);
+            }
+            *area += fabsf(a2) * 0.5f;
+            from = k + 1;
+        }
+    }
+}
+
 void dl_poly_end_(Pc *pc)
 {
     int slot = poly_slot;
@@ -902,7 +1083,31 @@ void dl_poly_end_(Pc *pc)
         miny = fminf(miny, fminf(a.y, b.y)), maxy = fmaxf(maxy, fmaxf(a.y, b.y));
     }
     poly->u.poly.e_from = (uint16_t)poly_edges_from, poly->u.poly.e_to = (uint16_t)f->n_items;
-    int rings = build_rings(f, seg, n_edges);
+    int lx0, ly0, lx1, ly1;
+    int total = diff_pixels(pc, poly_snap, &lx0, &ly0, &lx1, &ly1); /* what the outline and the flood fill changed */
+    /* Outlines in the scenery's direction (every edge staged) are closed along the border on the side the game
+     * filled: both windings are tried, the one whose area matches the changed pixels is kept (and stored for the
+     * re-projection between frames). */
+    bool directed = n_edges > 0;
+    for (int i = poly_edges_from; i < f->n_items && directed; i++)
+        if (f->items[i].kind == DL_LINE && (f->items[i].flags & DL_F_EDGE) && (f->items[i].flags & DL_F_INT))
+            directed = false;
+    int rings = -1;
+    poly->u.poly.wind = 0;
+    if (directed) {
+        float bad[2];
+        for (int w = 0; w < 2; w++) {
+            int r = stitch_rings(f, seg, n_edges, w ? -1 : 1);
+            bad[w] = r < 0 ? 1e30f : fill_mismatch(pc, f, first, f->n_verts - first);
+            f->n_verts = first;
+        }
+        if (bad[0] < 1e30f || bad[1] < 1e30f) {
+            poly->u.poly.wind = (int8_t)(bad[1] < bad[0] ? -1 : 1);
+            rings = stitch_rings(f, seg, n_edges, poly->u.poly.wind);
+        }
+    }
+    if (rings < 0)
+        rings = build_rings(f, seg, n_edges);
     if (rings) {
         poly->colour = d8(pc, COLOUR_BYTE);
         poly->u.poly.first = (uint16_t)first;
@@ -925,8 +1130,6 @@ void dl_poly_end_(Pc *pc)
     /* Everything the outline and the flood fill changed since poly_begin: a fill that leaked out of (or was
      * not closed by) the outline cannot be reproduced from the vectors, so the item carries the box of the
      * changed pixels and the back end shows that box from the CGA picture (DL_F_LEAK). */
-    int lx0, ly0, lx1, ly1;
-    int total = diff_pixels(pc, poly_snap, &lx0, &ly0, &lx1, &ly1);
     bool leak = total > 2 * (area + perim) + 30;
     if (leak) {
         poly->flags |= DL_F_LEAK;
@@ -951,6 +1154,11 @@ void dl_poly_end_(Pc *pc)
     /* The flood fill wrote inside the outline (one row/byte around it) or, for a leak, inside its box. */
     if (leak)
         claim_box(pc, lx0, ly0, lx1, ly1);
+    for (int k = 0; k < poly->u.poly.count && rings; k++) { /* a ring closed along the border reaches beyond its edges */
+        DlPt v = f->verts[first + k];
+        if (!isnan(v.x))
+            minx = fminf(minx, v.x), maxx = fmaxf(maxx, v.x), miny = fminf(miny, v.y), maxy = fmaxf(maxy, v.y);
+    }
     claim_box(pc, (int)minx - 2, (int)miny - 1, (int)maxx + 2, (int)maxy + 1);
     sync(pc, "poly_end");
 }
@@ -1187,7 +1395,9 @@ static void poly_at(DlFrame *f, DlItem *it)
         if (!(e->flags & DL_F_HIDDEN) && n < MAX_EDGES)
             seg[n][0] = e->u.line.a, seg[n++][1] = e->u.line.b;
     }
-    int first = f->n_verts, rings = build_rings(f, seg, n);
+    int first = f->n_verts, rings = it->u.poly.wind ? stitch_rings(f, seg, n, it->u.poly.wind) : -1;
+    if (rings < 0)
+        rings = build_rings(f, seg, n);
     if (!rings) {
         it->flags |= DL_F_HIDDEN;
         return;
@@ -1246,12 +1456,12 @@ const DlFrame *dl_view_at(uint64_t now)
     float a = 1.0f; /* display time since the view first showed, in intervals between the last two views */
     if (f->dt)
         a = fminf(1.0f, (float)(now - shown_at) / (float)f->dt);
-    const DlFrame *l = view_s(f, smooth_mode == DL_SMOOTH_AHEAD ? 1.0f + a : a);
+    const DlFrame *l = view_s(f, a);
     return l;
 }
 
 /* --dl-check: the frame re-projected at its own time must give the recorded positions back. */
-static long sc_items, sc_off, sc_hidden;
+static long sc_items, sc_off, sc_hidden, sc_polys, sc_poly_off;
 static float sc_max;
 
 static float dist_line(DlPt p, DlPt a, DlPt b) /* distance of p from the infinite line a-b */
@@ -1268,6 +1478,17 @@ static void smooth_check(void)
         return;
     for (int i = 0; i < f->n_items; i++) {
         const DlItem *o = &f->items[i], *n = &l->items[i];
+        if (o->kind == DL_POLY && !(o->flags & (DL_F_EMPTY | DL_F_LEAK)) && o->u.poly.rings) {
+            float a0, a1, p0, p1; /* the polygon rebuilt from its re-projected outline: same area */
+            rings_size(f, o->u.poly.first, o->u.poly.count, &a0, &p0);
+            if (n->flags & DL_F_HIDDEN)
+                a1 = p1 = 0;
+            else
+                rings_size(l, n->u.poly.first, n->u.poly.count, &a1, &p1);
+            sc_polys++;
+            if (fabsf(a1 - a0) > 0.05f * a0 + p0)
+                sc_poly_off++;
+        }
         if (o->va < 0 || o->kind == DL_POLY)
             continue;
         sc_items++;
@@ -1292,6 +1513,9 @@ static void sm_report(void)
     if (sc_items)
         fprintf(stderr, "smooth: re-projected at their own time, %ld of %ld items are off by more than 1.5 px (max %.1f), %ld hidden\n",
                 sc_off, sc_items, sc_max, sc_hidden);
+    if (sc_polys)
+        fprintf(stderr, "smooth: %ld of %ld polygons rebuilt at their own time differ in area by more than 5%% + perimeter\n",
+                sc_poly_off, sc_polys);
 }
 
 /* ---- text rows (S2.2) ------------------------------------------------------------------------ */

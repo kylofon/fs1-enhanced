@@ -50,9 +50,8 @@ bool enh_parse_arg(int argc, char *argv[], int *i)
         sharp_set_line_width((float)SDL_atof(argv[++*i]));
         return true;
     }
-    if (SDL_strcmp(argv[*i], "--smooth") == 0 && *i + 1 < argc) { /* S3.2: off | on | ahead */
-        const char *m = argv[++*i];
-        dl_set_smooth(SDL_strcmp(m, "off") == 0 ? DL_SMOOTH_OFF : SDL_strcmp(m, "ahead") == 0 ? DL_SMOOTH_AHEAD : DL_SMOOTH_ON);
+    if (SDL_strcmp(argv[*i], "--smooth") == 0 && *i + 1 < argc) { /* S3.2: on | off */
+        dl_set_smooth(SDL_strcmp(argv[++*i], "off") == 0 ? DL_SMOOTH_OFF : DL_SMOOTH_ON);
         return true;
     }
     if (SDL_strcmp(argv[*i], "--view-border") == 0) {

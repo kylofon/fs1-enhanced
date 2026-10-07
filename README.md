@@ -12,9 +12,9 @@ Status and plan: [PLAN.md](PLAN.md) (as a page: `python tools/plan_site.py`, the
 
 * `--classic`: the original picture and behaviour, as the faithful port v0.1.0.
 * `--view-border`: keep the white left border of the 3D window (the sharp view leaves it out).
-* `--smooth on|ahead|off` (default `on`): the game draws its 3D view about five times a second; the sharp
-  view moves it on at every display frame, between the last two pictures (`on`, one picture late) or past the
-  last one (`ahead`, no delay). The simulation is unchanged.
+* `--smooth on|off` (default `on`): the game draws its 3D view about five times a second; the sharp view
+  moves it on at every display frame, between the last two pictures (one picture late). The simulation is
+  unchanged.
 * More to come (PLAN.md): sharp 3D view, panel and text; widescreen; smooth frame rate; gamepad and
   mouse yoke; key bindings, settings, quick save; a launcher.
 

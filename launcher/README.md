@@ -21,10 +21,9 @@ Aces of the Pacific Enhanced.
 * **Display and sound**
   * **Line width** (`--line-width`, default 2): thickness of the sharp 3D view's lines in window pixels, 0 =
     hairlines.
-  * **Motion** (`--smooth on|ahead|off`, default on): the game draws its 3D view about five times a second;
-    *Smooth* moves the view on at every display frame between the last two pictures the game drew (one game
-    picture late), *Smooth, without delay* continues the motion past the last one (no delay, may overshoot when the
-    motion changes), *As the original* shows each picture until the next. The simulation is the same in all three.
+  * **Smooth motion** (default on; off = `--smooth off`): the game draws its 3D view about five times a second;
+    smooth motion moves the view on at every display frame between the last two pictures the game drew (one game
+    picture late), off shows each picture until the next. The simulation is the same either way.
   * **Start on the RGB monitor** (`--rgb`); F11 in the game cycles sharp, composite and RGB.
   * **Sound**: off starts the game with `SDL_AUDIO_DRIVER=dummy`.
 

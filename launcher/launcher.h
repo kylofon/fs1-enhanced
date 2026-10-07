@@ -41,7 +41,7 @@ private:
     wxStaticText* statusNote_ = nullptr;
     wxChoice* start_ = nullptr;
     wxSpinCtrl* lineWidth_ = nullptr;
-    wxChoice* smooth_ = nullptr;
+    wxCheckBox* smooth_ = nullptr;
     wxCheckBox* rgb_ = nullptr;
     wxCheckBox* sound_ = nullptr;
     wxButton* play_ = nullptr;

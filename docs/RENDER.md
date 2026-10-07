@@ -117,6 +117,16 @@ fallback in section 5 shows them.
   chains cut by the clip rectangle (x 1..159, y 0..105) are joined along the view border; a ring left open
   is closed by a chord, or through one corner when its ends are on adjacent borders. Rings without area
   are dropped. Rings in the vertex pool are separated by a NaN vertex.
+  S3.2 follow-up: when every edge was staged, the edges keep the scenery's direction (p1 -> p2, not the draw
+  order), so an outline runs one way round, and `stitch_rings` closes each chain cut by the clip rectangle by
+  walking along the view border, in the polygon's winding direction, to the next chain's start (corners
+  included). The winding is taken from the game's own fill: both are built and the one whose rings best cover
+  the pixels the outline and fill changed (area not changed + changed pixels outside) is kept, and stored in
+  the item (`u.poly.wind`) for the re-projection. Before this, a polygon of which only the shoreline crossed
+  the view (from the left border to the right) was closed by a chord, had no area and was flagged leaking: its
+  half-view box was then drawn from the CGA picture (jaggy, and fixed while the vectors moved). In the demo
+  flight 69 of 436 frames had such a box; now 1 polygon in the whole flight (a zig-zag outline whose fill
+  really leaks).
 - **Leaking flood fills.** A fill that is not bounded by its outline (mountain polygons whose outline is only
   the ridge line fill the sky down to the horizon) cannot be reproduced from vectors. `dl_poly_end` compares
   the pixels changed since `dl_poly_begin` with area + perimeter; when it is more than twice that the
@@ -229,10 +239,12 @@ clip and the projection (rotate_point's rows x, 2y, z/2: the view is |x| <= z, |
 (scenery address of the point, + step number, + occurrence in the frame). At the commit each vertex looks for its
 identity in the previous committed frame and keeps that position as `e0` (unless implausibly far: further than
 its own distance). At draw time each vertex is at `e0 + (e - e0) * s`, `s` = display time since the view first showed / CPU
-time between the last two commits (clamped to 0..1), or `1 + s` with `--smooth ahead`; lines are clipped against the view
+time between the last two commits (clamped to 0..1) (extrapolating past the last frame, `1 + s`, was tried as
+`--smooth ahead` and dropped after the first look: bad in play); lines are clipped against the view
 pyramid in float, projected with the item's projection set (`DlFrame.pj`, [3167]..[316A] at the time), dots are
 dropped outside, the horizon line is only clipped at a small z, and every polygon whose edges all have vertices is
-rebuilt from its re-projected edges with the same ring builder (`build_rings`) as at record time. Items outside the
+rebuilt from its re-projected edges with the same ring builder as at record time (`stitch_rings` with the
+recorded winding, else `build_rings`). Items outside the
 view at that moment get `DL_F_HIDDEN`. Items without vertices (fills, 2D lines, `DL_F_INT` items, leaking
 polygons' CGA boxes, fallback tiles) stay where the frame has them.
 

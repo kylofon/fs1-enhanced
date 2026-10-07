@@ -213,8 +213,14 @@ pixel. Rows the detection did not claim (shifted text, panel art) keep the smoot
 
 The game commits a new view about every 200-260 ms (4-5 per second, measured over the campaign sessions). The
 back end draws the view at every display frame from the last committed frame with each 3D point moved to the
-display frame's time (`dl_view_at(now)`, `now` = CPU cycles); the simulation, its rates and the CGA picture are
-untouched (cycles identical to `--classic`).
+display frame's time (`dl_view_at(now)`); the simulation, its rates and the CGA picture are untouched (cycles
+identical to `--classic`).
+
+**Time base.** `now` is the display clock (`target_cycles` in `main.c`: the emulated time the display frame stands
+for), counted from the display frame that first showed the view. The CPU cycle counter is no clock for this: the
+scenery pass is one native step that charges its ~0.9 M cycles (~0.2 s) at once, and the next ~11 display frames
+run no CPU to pay it back, so "cycles since the commit" jumps from 0 to a whole interval in two display frames
+(the first version did that: no visible change).
 
 **Vertices, not poses.** The scenery switches eye position, angles, local origins (op 24, with a shift) and even
 projection scales (op 0E) many times per frame, so one camera pose per frame cannot re-project it. Instead every
@@ -222,8 +228,8 @@ point the scenery puts into eye space becomes a **vertex** (`DlVtx`): its eye ve
 clip and the projection (rotate_point's rows x, 2y, z/2: the view is |x| <= z, |y| <= z), and an **identity**
 (scenery address of the point, + step number, + occurrence in the frame). At the commit each vertex looks for its
 identity in the previous committed frame and keeps that position as `e0` (unless implausibly far: further than
-its own distance). At draw time each vertex is at `e0 + (e - e0) * s`, `s` = time since the commit / time between
-the last two commits (clamped to 0..1), or `1 + s` with `--smooth ahead`; lines are clipped against the view
+its own distance). At draw time each vertex is at `e0 + (e - e0) * s`, `s` = display time since the view first showed / CPU
+time between the last two commits (clamped to 0..1), or `1 + s` with `--smooth ahead`; lines are clipped against the view
 pyramid in float, projected with the item's projection set (`DlFrame.pj`, [3167]..[316A] at the time), dots are
 dropped outside, the horizon line is only clipped at a small z, and every polygon whose edges all have vertices is
 rebuilt from its re-projected edges with the same ring builder (`build_rings`) as at record time. Items outside the

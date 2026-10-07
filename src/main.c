@@ -824,7 +824,7 @@ SDL_AppResult SDL_AppIterate(void *appstate)
     SDL_RenderClear(app->renderer);
     SDL_RenderTexture(app->renderer, app->screen, NULL, NULL);
     if (enh.sharp)                                                      /* ENH: sharp 3D view */
-        sharp_view(app->renderer, pc, app->screen);
+        sharp_view(app->renderer, pc, app->screen, app->target_cycles); /* display time: smooth view (S3.2) */
     if (enh.sharp && shot_due(app)) {                                   /* ENH: screenshot of the sharp output */
         SDL_DestroySurface(app->sharp_shot);
         app->sharp_shot = SDL_RenderReadPixels(app->renderer, NULL);

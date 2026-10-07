@@ -254,6 +254,9 @@ Notes:
   campaign session; drawn at their own time the frames match the recorded floats (max 0.5 px except a few long ground-polygon edges behind the eye, up to 17 px:
   the game's fixed-point clip). `--dl-check` clean as before (release build; the emulator build's unrecorded-write lines are the same at HEAD). Cycles identical
   to `--classic` in every mode (73093945 at frame 910), `--classic` screenshot identical, `verify_campaign.py` OK. Not checked by eye (U1).
+  Fix after the first U1 ("no change"): the interpolation was timed by the CPU cycle counter, which jumps by the whole scenery pass (~0.9 M cycles, one native
+  step) and then stands still while the display pays it back; it is now timed by the display clock (`target_cycles`, passed to `sharp_view`) from the first
+  display frame that shows a view: s grows by ~0.075 per display frame, continuous across views.
 
 ## User tasks
 ### U1 — Visual checks (when an agent asks)

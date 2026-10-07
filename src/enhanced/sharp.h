@@ -27,6 +27,6 @@ void sharp_render_cga(const Pc *pc, uint32_t *px);
 
 /* Draws the sharp view over the CGA texture just rendered with SDL_RenderTexture. Returns false when
  * nothing sharp was drawn (no list yet, overflowed frame, or the video mode is not the 640x200 one). */
-bool sharp_view(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga);
+bool sharp_view(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga, uint64_t now); /* now: display time (S3.2) */
 
 #endif

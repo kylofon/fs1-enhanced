@@ -1197,15 +1197,9 @@ static void poly_at(DlFrame *f, DlItem *it)
     it->u.poly.rings = (uint16_t)rings;
 }
 
-const DlFrame *dl_view_at(uint64_t now)
+/* Frame f with every vertex at e0 + (e - e0) * s. */
+static const DlFrame *view_s(const DlFrame *f, float s)
 {
-    const DlFrame *f = dl_view();
-    if (!f || f->incomplete || smooth_mode == DL_SMOOTH_OFF || !f->n_vtx)
-        return f;
-    float a = 1.0f; /* time since the commit, in frame intervals */
-    if (f->dt)
-        a = now > f->t ? fminf(1.0f, (float)(now - f->t) / (float)f->dt) : 0.0f;
-    float s = smooth_mode == DL_SMOOTH_AHEAD ? 1.0f + a : a;
     for (int i = 0; i < f->n_vtx; i++)
         for (int k = 0; k < 3; k++)
             lerp_v[i][k] = f->vtx[i].e0[k] + (f->vtx[i].e[k] - f->vtx[i].e0[k]) * s;
@@ -1236,6 +1230,26 @@ const DlFrame *dl_view_at(uint64_t now)
     return l->incomplete ? f : l;
 }
 
+/* The time base is the display clock (now: the emulated time the display frame stands for), counted from the
+ * display frame that first showed this view: the CPU cycle counter itself is no clock for this, since the
+ * scenery pass is one native step that charges its ~0.2 s at once and the next display frames run no CPU to
+ * pay it back, so a commit time measured in cycles lies ahead of the display by up to a whole interval. */
+const DlFrame *dl_view_at(uint64_t now)
+{
+    const DlFrame *f = dl_view();
+    if (!f || f->incomplete || smooth_mode == DL_SMOOTH_OFF || !f->n_vtx)
+        return f;
+    static uint32_t shown_no;
+    static uint64_t shown_at;
+    if (f->number != shown_no || now < shown_at)
+        shown_no = f->number, shown_at = now;
+    float a = 1.0f; /* display time since the view first showed, in intervals between the last two views */
+    if (f->dt)
+        a = fminf(1.0f, (float)(now - shown_at) / (float)f->dt);
+    const DlFrame *l = view_s(f, smooth_mode == DL_SMOOTH_AHEAD ? 1.0f + a : a);
+    return l;
+}
+
 /* --dl-check: the frame re-projected at its own time must give the recorded positions back. */
 static long sc_items, sc_off, sc_hidden;
 static float sc_max;
@@ -1249,10 +1263,7 @@ static float dist_line(DlPt p, DlPt a, DlPt b) /* distance of p from the infinit
 static void smooth_check(void)
 {
     const DlFrame *f = dl_view();
-    int mode = smooth_mode;
-    smooth_mode = DL_SMOOTH_ON;
-    const DlFrame *l = dl_view_at(f->t + f->dt);
-    smooth_mode = mode;
+    const DlFrame *l = view_s(f, 1.0f);
     if (l == f)
         return;
     for (int i = 0; i < f->n_items; i++) {

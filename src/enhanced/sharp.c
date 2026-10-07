@@ -894,9 +894,9 @@ static void panel_draw(SDL_Renderer *r)
     flush_clip(r, NULL);
 }
 
-static bool view_draw(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga)
+static bool view_draw(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga, uint64_t now)
 {
-    const DlFrame *f = dl_view_at(pc->cpu.cycles); /* S3.2: the view moved on to this display frame's time */
+    const DlFrame *f = dl_view_at(now); /* S3.2: the view moved on to this display frame's time */
     if (!f || f->incomplete || !pc->composite || (pc->cga_mode & 0x1E) != 0x1A)
         return false;
     view_y0 = f->view_row;
@@ -964,10 +964,10 @@ static bool view_draw(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga)
     return true;
 }
 
-bool sharp_view(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga)
+bool sharp_view(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga, uint64_t now)
 {
     panel_draw(renderer);
-    bool shown = view_draw(renderer, pc, cga);
+    bool shown = view_draw(renderer, pc, cga, now);
     text_draw(renderer);
     cockpit_draw(renderer);
     return shown;

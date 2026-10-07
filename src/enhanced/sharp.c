@@ -898,6 +898,25 @@ static bool view_draw(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga)
     view_y0 = f->view_row;
     n_verts = n_idx = n_hair = 0;
 
+    /* S2.19: with the panel frame drawn as vectors, the sky and ground go on behind the cockpit's top edge (the black
+     * strip under the view and the corner above the glareshield curve); scenery itself is clipped at the view. Drawn
+     * first and from one line inside the view, so the view's soft bottom edge lies over the same colour, not black. */
+    const DlItem *sg = NULL;
+    for (int i = 0; i < f->n_items && !sg; i++)
+        if (f->items[i].kind == DL_SKYGROUND)
+            sg = &f->items[i];
+    if (sg && cockpit_gap_bottom(0) >= 0) {
+        for (int x = 0; x < 640;) {
+            int yb = cockpit_gap_bottom(x), e = x + 1;
+            while (e < 640 && cockpit_gap_bottom(e) == yb)
+                e++;
+            if (yb > view_y0 + VIEW_H)
+                sky_rect(sg, (float)x / 4.0f, (float)(VIEW_H - 1), (float)e / 4.0f, (float)(yb - view_y0));
+            x = e;
+        }
+        flush_clip(renderer, NULL);
+    }
+
     for (int i = 0; i < f->n_items; i++) {
         const DlItem *it = &f->items[i];
         switch (it->kind) {
@@ -930,23 +949,6 @@ static bool view_draw(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga)
     }
 
     flush(renderer);
-    /* S2.19: with the panel frame drawn as vectors, the sky and ground go on behind the cockpit's top edge (the black
-     * strip under the view and the corner above the glareshield curve); scenery itself is clipped at the view. */
-    const DlItem *sg = NULL;
-    for (int i = 0; i < f->n_items && !sg; i++)
-        if (f->items[i].kind == DL_SKYGROUND)
-            sg = &f->items[i];
-    if (sg && cockpit_gap_bottom(0) >= 0) {
-        for (int x = 0; x < 640;) {
-            int yb = cockpit_gap_bottom(x), e = x + 1;
-            while (e < 640 && cockpit_gap_bottom(e) == yb)
-                e++;
-            if (yb > view_y0 + VIEW_H)
-                sky_rect(sg, (float)x / 4.0f, (float)VIEW_H, (float)e / 4.0f, (float)(yb - view_y0));
-            x = e;
-        }
-        flush_clip(renderer, NULL);
-    }
     SDL_SetRenderClipRect(renderer, NULL);
     fallback_tiles(renderer, pc, cga, dl_view_snap(), view_y0);
     return true;

@@ -199,6 +199,40 @@ static void ring(const DlPt *p, int n, SDL_FColor col)
     tri(p[stack[0]], p[stack[1]], p[stack[2]], col);
 }
 
+/* A ring vertex on the left/right clip border (the scenery is clipped to columns 1..159) moves out along its
+ * outline edge past the view edge, so the fill reaches the screen edge instead of ending in a vertical bar one
+ * column in. */
+#define BORDER_PUSH 8.0f
+static void ring_out(const DlPt *p, int n, SDL_FColor col)
+{
+    static DlPt q[256];
+    if (n < 3 || n > 256) {
+        ring(p, n, col);
+        return;
+    }
+    for (int i = 0; i < n; i++) {
+        q[i] = p[i];
+        bool l = p[i].x <= 1.5f, r = p[i].x >= VIEW_W - 1.5f;
+        if (!l && !r)
+            continue;
+        float tx = l ? -BORDER_PUSH : VIEW_W + BORDER_PUSH;
+        DlPt a = p[(i + n - 1) % n], b = p[(i + 1) % n];
+        bool a_in = l ? a.x > 1.5f : a.x < VIEW_W - 1.5f, b_in = l ? b.x > 1.5f : b.x < VIEW_W - 1.5f;
+        if (a_in && b_in) /* a corner of the outline: keep it */
+            continue;
+        const DlPt *o = a_in ? &a : b_in ? &b : NULL; /* the neighbour inside the view */
+        if (o && fabsf(o->x - p[i].x) > 0.01f) {
+            float s = (tx - p[i].x) / (p[i].x - o->x);
+            if (s > 0 && s <= 12.0f) {
+                q[i] = (DlPt){ tx, p[i].y + (p[i].y - o->y) * s };
+                continue;
+            }
+        }
+        q[i].x = tx;
+    }
+    ring(q, n, col);
+}
+
 static void poly(const DlFrame *f, const DlItem *it)
 {
     SDL_FColor col = col_byte(it->colour);
@@ -206,7 +240,7 @@ static void poly(const DlFrame *f, const DlItem *it)
     int n = it->u.poly.count, from = 0;
     for (int k = 0; k <= n; k++) {
         if (k == n || isnan(v[k].x)) {
-            ring(v + from, k - from, col);
+            ring_out(v + from, k - from, col);
             from = k + 1;
         }
     }
@@ -989,7 +1023,7 @@ static void flush_gap(SDL_Renderer *r, const float (*c)[2], int n, float top)
  * view and the corner above the glareshield curve): the sky and ground (S2.19), then the scenery re-projected into
  * that band (S3.3, dl_gap_at). Drawn before the view and from one line inside it, so the view's soft bottom edge lies
  * over the same picture, not black. */
-static void gap_draw(SDL_Renderer *r, const DlFrame *f, uint64_t now)
+static bool gap_draw(SDL_Renderer *r, const DlFrame *f, uint64_t now)
 {
     const float(*c)[2];
     int n = cockpit_gap_curve(&c, NULL);
@@ -997,7 +1031,7 @@ static void gap_draw(SDL_Renderer *r, const DlFrame *f, uint64_t now)
     for (int i = 0; i < n; i++)
         bot = fmaxf(bot, c[i][1] + 0.5f);
     if (n < 2 || bot <= (float)(view_y0 + VIEW_H))
-        return;
+        return false;
     float y_end = bot - (float)view_y0; /* in view units */
     const DlItem *sg = NULL, *fill = NULL;
     for (int i = 0; i < f->n_items && !sg; i++) {
@@ -1008,7 +1042,7 @@ static void gap_draw(SDL_Renderer *r, const DlFrame *f, uint64_t now)
             fill = it; /* no horizon in the view: all sky or all ground */
     }
     if (!sg && !fill)
-        return;
+        return false;
     n_verts = n_idx = n_hair = 0;
     if (sg)
         sky_rect(sg, 0, (float)(VIEW_H - 1), VIEW_W, y_end);
@@ -1025,6 +1059,7 @@ static void gap_draw(SDL_Renderer *r, const DlFrame *f, uint64_t now)
             dot(it->u.line.a, col_pair(it->colour));
     }
     flush_gap(r, c, n, (float)(view_y0 + VIEW_H - 1));
+    return true;
 }
 
 static bool view_draw(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga, uint64_t now)
@@ -1035,7 +1070,9 @@ static bool view_draw(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga, ui
     view_y0 = f->view_row;
     n_verts = n_idx = n_hair = 0;
 
-    gap_draw(renderer, f, now);
+    /* the gap's sky/ground and scenery start on the view's last line: the view's own fills stop above it, or they
+     * would paint that line in plain ground colour (a hairline above the cockpit edge) */
+    bool gapped = gap_draw(renderer, f, now);
 
     for (int i = 0; i < f->n_items; i++) {
         const DlItem *it = &f->items[i];
@@ -1047,10 +1084,17 @@ static bool view_draw(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga, ui
              * left out, the sky and ground reach the screen's left edge */
             if (!view_border && it->u.rect.x == 0 && it->u.rect.w == 1)
                 break;
+            if (gapped && it->u.rect.w >= VIEW_W - 1 && it->u.rect.h >= VIEW_H - 1) {
+                fill_rect(it->u.rect.x, it->u.rect.y, it->u.rect.w, (float)(VIEW_H - 1) - it->u.rect.y, col_word(it->colour));
+                break;
+            }
             fill_rect(it->u.rect.x, it->u.rect.y, it->u.rect.w, it->u.rect.h, col_word(it->colour));
             break;
         case DL_SKYGROUND:
-            sky(it);
+            if (gapped)
+                sky_rect(it, 0, 0, VIEW_W, (float)(VIEW_H - 1));
+            else
+                sky(it);
             break;
         case DL_POLY:
             if (it->flags & DL_F_LEAK) { /* the fill left its outline: show the changed box from the CGA picture */

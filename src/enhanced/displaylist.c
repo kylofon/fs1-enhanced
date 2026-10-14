@@ -1522,12 +1522,15 @@ static const DlFrame *view_s(const DlFrame *f, float s)
     l->view_row = f->view_row, l->number = f->number, l->incomplete = false, l->t = f->t, l->dt = f->dt;
     for (int i = 0; i < l->n_items; i++) {
         DlItem *it = &l->items[i];
-        if (it->va < 0 || it->va >= f->n_vtx || (it->kind != DL_DOT && (it->vb < 0 || it->vb >= f->n_vtx)) ||
-            (it->flags & DL_F_OUT))
+        if (it->va < 0 || it->va >= f->n_vtx || (it->kind != DL_DOT && (it->vb < 0 || it->vb >= f->n_vtx)))
             continue;
         if (it->kind == DL_LINE) {
+            /* a line the game's clip rejected comes into view as the eye moves on: shown (and part of its polygon's
+             * outline) from then on, so the coast and the fills do not stop at the view edge */
             if (!line_at(l, it))
                 it->flags |= DL_F_HIDDEN;
+            else if (it->flags & DL_F_OUT)
+                it->flags &= (uint8_t)~(DL_F_HIDDEN | DL_F_OUT);
         } else if (it->kind == DL_DOT) {
             const float *e = lerp_v[it->va];
             if (!(fabsf(e[0]) <= e[2] && fabsf(e[1]) <= e[2] && project_e(l, it->pj, e, &it->u.line.a)))

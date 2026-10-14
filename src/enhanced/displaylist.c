@@ -968,7 +968,9 @@ static int stitch_rings(DlFrame *f, DlPt (*seg)[2], int n_edges, int wind)
         for (bool grew = true; grew;) {
             grew = false;
             for (int k = 0; k < n_edges; k++) {
-                if (used[k] || near_pt(chain[hi], chain[lo]))
+                /* closed: ends meet after at least three edges (an edge clipped to a stub under a pixel long at
+                 * the view border is not a ring) */
+                if (used[k] || (hi - lo >= 3 && near_pt(chain[hi], chain[lo])))
                     continue;
                 if (near_pt(chain[hi], seg[k][0]))
                     chain[++hi] = seg[k][1];
@@ -984,7 +986,7 @@ static int stitch_rings(DlFrame *f, DlPt (*seg)[2], int n_edges, int wind)
             return -1;
         memcpy(&scratch[sc], &chain[lo], (size_t)n * sizeof(DlPt));
         struct Chain *c = &ch[n_ch++];
-        *c = (struct Chain){ &scratch[sc], n, !near_pt(chain[lo], chain[hi]), false, 0, 0 };
+        *c = (struct Chain){ &scratch[sc], n, !(n >= 4 && near_pt(chain[lo], chain[hi])), false, 0, 0 };
         sc += n;
         if (c->open) {
             if (!border_side(c->p[0]) || !border_side(c->p[n - 1]))

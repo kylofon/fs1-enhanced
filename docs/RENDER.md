@@ -288,6 +288,10 @@ that start far behind the eye, where the game's fixed-point clip is a few pixels
 
 ## 6e. The world behind the cockpit edge, S3.3 as built
 
+**Dropped 2026-10-26:** the strip under the view and the top-left corner stay black, as in the original; the drawing
+(`gap_draw`, `flush_gap`) is removed. What follows describes the removed drawing and the parts still in use
+(rejected `DL_F_OUT` lines, `dl_gap_at` for `--dl-check`, the smooth glareshield curve).
+
 With the frame module drawn as vectors, the gap between the view (rows 0..105) and the panel's top edge (the black
 line 106 and the top-left corner above the glareshield curve, down to line 117) shows the 3D world, not only the
 sky/ground split (S2.19).

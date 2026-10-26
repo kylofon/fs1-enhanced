@@ -928,140 +928,6 @@ static void panel_draw(SDL_Renderer *r)
     flush_clip(r, NULL);
 }
 
-/* ---- the world behind the cockpit's top edge (S2.19 sky and ground, S3.3 scenery) ------------------ */
-
-/* The part of polygon p (n points, room for 24) inside the convex polygon c (m points, either winding). */
-static float side_of(SDL_FPoint a, SDL_FPoint b, SDL_FPoint p) { return (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x); }
-
-static int clip_convex(SDL_FPoint *p, int n, const SDL_FPoint *c, int m, float sgn)
-{
-    SDL_FPoint tmp[24];
-    for (int e = 0; e < m && n > 0; e++) {
-        SDL_FPoint a = c[e], b = c[(e + 1) % m];
-        int k = 0;
-        for (int j = 0; j < n && k < 22; j++) {
-            SDL_FPoint P = p[j], Q = p[(j + 1) % n];
-            float fp = sgn * side_of(a, b, P), fq = sgn * side_of(a, b, Q);
-            if (fp >= 0)
-                tmp[k++] = P;
-            if ((fp >= 0) != (fq >= 0)) {
-                float t = fp / (fp - fq);
-                tmp[k++] = (SDL_FPoint){ P.x + (Q.x - P.x) * t, P.y + (Q.y - P.y) * t };
-            }
-        }
-        memcpy(p, tmp, (size_t)k * sizeof *p);
-        n = k;
-    }
-    return n;
-}
-
-/* Draws the batch (triangles and hairlines, output coordinates) clipped to the area between the scan line `top` and
- * the cockpit's top edge (cockpit_gap_curve): one convex band per piece of the curve, the triangles cut in software
- * (the clip rectangle cannot follow the curve). */
-static void flush_gap(SDL_Renderer *r, const float (*c)[2], int n, float top)
-{
-    static SDL_Vertex *ov;
-    static int *oi;
-    static int n_ov, n_oi, cap_ov, cap_oi;
-    n_ov = n_oi = 0;
-    for (int b = 0; b + 1 < n; b++) {
-        float xa = c[b][0], xb = c[b + 1][0];
-        if (xb <= xa)
-            continue;
-        SDL_FPoint band[4] = { { xa, top * SY }, { xb, top * SY }, { xb, (c[b + 1][1] + 0.5f) * SY }, { xa, (c[b][1] + 0.5f) * SY } };
-        float sgn = 1.0f; /* clockwise on the screen (y down): inside is side_of >= 0 */
-        float ylo = fmaxf(band[2].y, band[3].y);
-        for (int t = 0; t + 2 < n_idx; t += 3) {
-            SDL_FPoint p[24];
-            float x0 = 1e9f, x1 = -1e9f, y0 = 1e9f;
-            for (int k = 0; k < 3; k++) {
-                p[k] = verts[idx[t + k]].position;
-                x0 = fminf(x0, p[k].x), x1 = fmaxf(x1, p[k].x), y0 = fminf(y0, p[k].y);
-            }
-            if (x1 <= xa || x0 >= xb || y0 >= ylo)
-                continue;
-            int m = clip_convex(p, 3, band, 4, sgn);
-            if (m < 3)
-                continue;
-            if (n_ov + m > cap_ov)
-                cap_ov = (n_ov + m) * 2, ov = realloc(ov, (size_t)cap_ov * sizeof *ov);
-            if (n_oi + 3 * (m - 2) > cap_oi)
-                cap_oi = (n_oi + 3 * (m - 2)) * 2, oi = realloc(oi, (size_t)cap_oi * sizeof *oi);
-            SDL_FColor col = verts[idx[t]].color;
-            for (int k = 0; k < m; k++)
-                ov[n_ov + k] = (SDL_Vertex){ p[k], col, { 0, 0 } };
-            for (int k = 1; k + 1 < m; k++)
-                oi[n_oi++] = n_ov, oi[n_oi++] = n_ov + k, oi[n_oi++] = n_ov + k + 1;
-            n_ov += m;
-        }
-        for (int h = 0; h < n_hair; h++) { /* hairlines: the segment's part inside the band */
-            SDL_FPoint a = hair[h].a, d = { hair[h].b.x - a.x, hair[h].b.y - a.y };
-            float t0 = 0, t1 = 1;
-            for (int e = 0; e < 4 && t0 < t1; e++) {
-                float fa = sgn * side_of(band[e], band[(e + 1) % 4], a);
-                float fb = sgn * side_of(band[e], band[(e + 1) % 4], hair[h].b);
-                if (fa < 0 && fb < 0)
-                    t1 = -1;
-                else if (fa < 0)
-                    t0 = fmaxf(t0, fa / (fa - fb));
-                else if (fb < 0)
-                    t1 = fminf(t1, fa / (fa - fb));
-            }
-            if (t0 < t1) {
-                SDL_SetRenderDrawColorFloat(r, hair[h].c.r, hair[h].c.g, hair[h].c.b, 1);
-                SDL_RenderLine(r, a.x + d.x * t0, a.y + d.y * t0, a.x + d.x * t1, a.y + d.y * t1);
-            }
-        }
-    }
-    SDL_SetRenderClipRect(r, NULL);
-    if (n_oi)
-        SDL_RenderGeometry(r, NULL, ov, n_ov, oi, n_oi);
-    n_verts = n_idx = n_hair = 0;
-}
-
-/* With the panel frame drawn as vectors, the world goes on behind the cockpit's top edge (the black strip under the
- * view and the corner above the glareshield curve): the sky and ground (S2.19), then the scenery re-projected into
- * that band (S3.3, dl_gap_at). Drawn before the view and from one line inside it, so the view's soft bottom edge lies
- * over the same picture, not black. */
-static bool gap_draw(SDL_Renderer *r, const DlFrame *f, uint64_t now)
-{
-    const float(*c)[2];
-    int n = cockpit_gap_curve(&c, NULL);
-    float bot = 0; /* the lowest scan line of the gap */
-    for (int i = 0; i < n; i++)
-        bot = fmaxf(bot, c[i][1] + 0.5f);
-    if (n < 2 || bot <= (float)(view_y0 + VIEW_H))
-        return false;
-    float y_end = bot - (float)view_y0; /* in view units */
-    const DlItem *sg = NULL, *fill = NULL;
-    for (int i = 0; i < f->n_items && !sg; i++) {
-        const DlItem *it = &f->items[i];
-        if (it->kind == DL_SKYGROUND)
-            sg = it;
-        else if (it->kind == DL_FILL && it->u.rect.w >= VIEW_W - 1 && it->u.rect.h >= VIEW_H - 1)
-            fill = it; /* no horizon in the view: all sky or all ground */
-    }
-    if (!sg && !fill)
-        return false;
-    n_verts = n_idx = n_hair = 0;
-    if (sg)
-        sky_rect(sg, 0, (float)(VIEW_H - 1), VIEW_W, y_end);
-    else
-        fill_rect(0, (float)(VIEW_H - 1), VIEW_W, y_end - (float)(VIEW_H - 1), col_word(fill->colour));
-    const DlFrame *g = dl_gap_at(now, (float)(VIEW_H - 2), y_end);
-    for (int i = 0; g && i < g->n_items; i++) {
-        const DlItem *it = &g->items[i];
-        if (it->kind == DL_POLY)
-            poly(g, it);
-        else if (it->kind == DL_LINE)
-            line(it->u.line.a, it->u.line.b, col_pair(it->colour));
-        else if (it->kind == DL_DOT)
-            dot(it->u.line.a, col_pair(it->colour));
-    }
-    flush_gap(r, c, n, (float)(view_y0 + VIEW_H - 1));
-    return true;
-}
-
 static bool view_draw(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga, uint64_t now)
 {
     const DlFrame *f = dl_view_at(now); /* S3.2: the view moved on to this display frame's time */
@@ -1069,10 +935,6 @@ static bool view_draw(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga, ui
         return false;
     view_y0 = f->view_row;
     n_verts = n_idx = n_hair = 0;
-
-    /* the gap's sky/ground and scenery start on the view's last line: the view's own fills stop above it, or they
-     * would paint that line in plain ground colour (a hairline above the cockpit edge) */
-    bool gapped = gap_draw(renderer, f, now);
 
     for (int i = 0; i < f->n_items; i++) {
         const DlItem *it = &f->items[i];
@@ -1084,17 +946,10 @@ static bool view_draw(SDL_Renderer *renderer, const Pc *pc, SDL_Texture *cga, ui
              * left out, the sky and ground reach the screen's left edge */
             if (!view_border && it->u.rect.x == 0 && it->u.rect.w == 1)
                 break;
-            if (gapped && it->u.rect.w >= VIEW_W - 1 && it->u.rect.h >= VIEW_H - 1) {
-                fill_rect(it->u.rect.x, it->u.rect.y, it->u.rect.w, (float)(VIEW_H - 1) - it->u.rect.y, col_word(it->colour));
-                break;
-            }
             fill_rect(it->u.rect.x, it->u.rect.y, it->u.rect.w, it->u.rect.h, col_word(it->colour));
             break;
         case DL_SKYGROUND:
-            if (gapped)
-                sky_rect(it, 0, 0, VIEW_W, (float)(VIEW_H - 1));
-            else
-                sky(it);
+            sky(it);
             break;
         case DL_POLY:
             if (it->flags & DL_F_LEAK) { /* the fill left its outline: show the changed box from the CGA picture */

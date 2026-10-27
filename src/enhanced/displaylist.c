@@ -1513,11 +1513,43 @@ static bool project_e(const DlFrame *f, int pj, const float *e, DlPt *out)
     return true;
 }
 
+/* The planes (n . e >= 0, for e[2] > 0) of the screen rectangle x0..x1, y0..y1 under projection set p. */
+static void rect_planes(const float *p, float x0, float x1, float y0, float y1, float pl[4][3])
+{
+    const float r[4][3] = { { p[0], 0, p[2] - x0 }, { -p[0], 0, x1 - p[2] }, { 0, p[1], p[3] - y0 }, { 0, -p[1], y1 - p[3] } };
+    memcpy(pl, r, sizeof r);
+}
+
+static float plane_d(const float *n, const float *e) { return n[0] * e[0] + n[1] * e[1] + n[2] * e[2]; }
+
+static bool clip_planes(const float pl[4][3], const float *p, const float *q, float *t0, float *t1)
+{
+    float a = 0, b = 1;
+    for (int i = 0; i < 4; i++) {
+        float fp = plane_d(pl[i], p), fq = plane_d(pl[i], q);
+        if (fp < 0 && fq < 0)
+            return false;
+        if (fp < 0)
+            a = fmaxf(a, fp / (fp - fq));
+        else if (fq < 0)
+            b = fminf(b, fp / (fp - fq));
+    }
+    *t0 = a, *t1 = b;
+    return a < b;
+}
+
+static bool game_eye; /* --dl-check: the game's own (truncated) eye, to compare with the recorded floats */
+
+/* A line clipped to the whole view rectangle (0..VIEW_W, 0..VIEW_H), not to the game's clip (x 1..159, y 0..105),
+ * so lines reach the screen edge like the fills; --dl-check compares with the game's clip. */
 static bool line_at(const DlFrame *f, DlItem *it)
 {
     const float *p = lerp_v[it->va], *q = lerp_v[it->vb];
-    float t0, t1, a[3], b[3];
-    if (!clip_pyramid(p, q, &t0, &t1))
+    float t0, t1, a[3], b[3], pl[4][3];
+    if (it->pj >= f->n_pj)
+        return false;
+    rect_planes(f->pj[it->pj], 0, VIEW_W, 0, VIEW_H, pl);
+    if (!(game_eye ? clip_pyramid(p, q, &t0, &t1) : clip_planes(pl, p, q, &t0, &t1)))
         return false;
     at(p, q, t0, a), at(p, q, t1, b);
     return project_e(f, it->pj, a, &it->u.line.a) && project_e(f, it->pj, b, &it->u.line.b);
@@ -1589,7 +1621,6 @@ static void poly_at(DlFrame *f, DlItem *it)
 }
 
 /* Frame f with every vertex at e0 + (e - e0) * s. */
-static bool game_eye; /* --dl-check: the game's own (truncated) eye, to compare with the recorded floats */
 
 static const DlFrame *view_s(const DlFrame *f, float s)
 {
@@ -1659,31 +1690,6 @@ const DlFrame *dl_view_at(uint64_t now)
 /* ---- S3.3 the world behind the cockpit's top edge ------------------------------------------------ */
 
 static DlFrame gap_f;
-
-/* The planes (n . e >= 0, for e[2] > 0) of the screen rectangle x0..x1, y0..y1 under projection set p. */
-static void rect_planes(const float *p, float x0, float x1, float y0, float y1, float pl[4][3])
-{
-    const float r[4][3] = { { p[0], 0, p[2] - x0 }, { -p[0], 0, x1 - p[2] }, { 0, p[1], p[3] - y0 }, { 0, -p[1], y1 - p[3] } };
-    memcpy(pl, r, sizeof r);
-}
-
-static float plane_d(const float *n, const float *e) { return n[0] * e[0] + n[1] * e[1] + n[2] * e[2]; }
-
-static bool clip_planes(const float pl[4][3], const float *p, const float *q, float *t0, float *t1)
-{
-    float a = 0, b = 1;
-    for (int i = 0; i < 4; i++) {
-        float fp = plane_d(pl[i], p), fq = plane_d(pl[i], q);
-        if (fp < 0 && fq < 0)
-            return false;
-        if (fp < 0)
-            a = fmaxf(a, fp / (fp - fq));
-        else if (fq < 0)
-            b = fminf(b, fp / (fp - fq));
-    }
-    *t0 = a, *t1 = b;
-    return a < b;
-}
 
 static bool same_vtx(const DlFrame *f, int a, int b)
 {

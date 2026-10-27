@@ -53,6 +53,7 @@
 #include "game/state.h"
 #include "enhanced/enhanced.h"   /* ENH: options */
 #include "enhanced/sharp.h"      /* ENH: sharp renderer */
+#include "enhanced/record.h"     /* ENH: --record */
 
 #define WINDOW_W 960
 #define WINDOW_H 720
@@ -360,6 +361,7 @@ static void start_mode_tick(App *app)
                  s + 100);
     parse_keys(app, list);
     app->start_frame = s;
+    SDL_Log("Start mode %d: keys from frame %ld", enh.start_mode, s); /* ENH: for --record-from */
 }
 
 static void run_key_script(App *app)
@@ -829,6 +831,7 @@ SDL_AppResult SDL_AppIterate(void *appstate)
         SDL_DestroySurface(app->sharp_shot);
         app->sharp_shot = SDL_RenderReadPixels(app->renderer, NULL);
     }
+    record_frame(app->renderer, app->frame);                            /* ENH: --record */
     SDL_RenderPresent(app->renderer);
 
     app->frame++;
@@ -867,6 +870,7 @@ void SDL_AppQuit(void *appstate, SDL_AppResult result)
         dump_memory(app);
     if (app->screenshot && app->pc)
         save_screenshot(app, app->screenshot);
+    record_close(); /* ENH: --record */
     if (app->pc) {
         SDL_Log("Stopped at CS:IP %04X:%04X after %llu cycles, CGA mode %02X color %02X CRTC R1=%02X R6=%02X R9=%02X", app->pc->cpu.sregs[S_CS],
                 app->pc->cpu.ip,

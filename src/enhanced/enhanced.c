@@ -2,6 +2,7 @@
 #include "enhanced/enhanced.h"
 #include "enhanced/displaylist.h"
 #include "enhanced/sharp.h"
+#include "enhanced/record.h"
 #include "enhanced/panel/cockpit.h"
 
 #include <SDL3/SDL.h>
@@ -52,6 +53,14 @@ bool enh_parse_arg(int argc, char *argv[], int *i)
     }
     if (SDL_strcmp(argv[*i], "--smooth") == 0 && *i + 1 < argc) { /* S3.2: on | off */
         dl_set_smooth(SDL_strcmp(argv[++*i], "off") == 0 ? DL_SMOOTH_OFF : DL_SMOOTH_ON);
+        return true;
+    }
+    if (SDL_strcmp(argv[*i], "--record") == 0 && *i + 1 < argc) {
+        record_set(argv[++*i]);
+        return true;
+    }
+    if (SDL_strcmp(argv[*i], "--record-from") == 0 && *i + 1 < argc) {
+        record_set_from(SDL_atoi(argv[++*i]));
         return true;
     }
     if (SDL_strcmp(argv[*i], "--view-border") == 0) {

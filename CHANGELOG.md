@@ -1,17 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 - 2026-10-27
 
-- Project set up from the faithful port v0.1.0 (`../Flight Simulator 1`, commit fdb9bf1).
-- `--classic`: every enhancement off (there are none yet).
-- Cockpit module framework (S2.5): the panel is divided into instrument modules that will each be redrawn whole as
-  vectors (`--module-off NAME|all`, `--module-outline`); see docs/PANEL.md.
-- Airspeed indicator (S2.6) redrawn as a vector module: ring, ticks, numerals, KNOTS and the needle from the game's airspeed.
-- Attitude indicator (S2.7) redrawn as a vector module: sub-pixel horizon from the game's bank and pitch, roll scale and pointer, aircraft symbol.
-- Altimeter (S2.8) redrawn as a vector module: scale, numerals, long and short hands from the game's altitude.
-- OMI/VOR indicator (S2.9) redrawn as a vector module: course needle, glide-slope bar, TO/FROM, marker lights, OBS numbers.
-- Turn coordinator, heading indicator (with a turning card), vertical speed indicator + elevator strip and tachometer (S2.10-S2.13) redrawn as vector modules.
-- Right-hand panel (S2.14-S2.18): flaps/trim/throttle strips, COMPASS with the O/M/I lights, FUEL/OIL gauges, GEAR/LIGHTS/MAGS/CARB H and the radio stack redrawn as vector modules.
-- Panel frame (S2.19): glareshield, separators, tracks and the aileron marker drawn from the clean panel image; no CGA pixels are left in the panel when all modules are on.
-- Sharp panel (S2.1): the airspeed, altimeter, VSI and tachometer needles are drawn as vector lines at window
-  size; the pixel needle sprites are taken out of the picture (`--needle-width F`, `--dump-panel FILE`).
+First release, built on the faithful port v0.1.0. The simulation is unchanged; `--classic` plays exactly as
+the faithful port.
+
+- Sharp 3D view (S1.2, S1.3): the scenery is recorded as a display list and drawn as vectors at window size,
+  with filled sky, ground and polygons (`--line-width F`, `--view-border`, `--dump-dl FILE`, `--dl-check`).
+- Smooth motion (S3.2, `--smooth on|off`): the 3D view moves on at every display frame between the game's
+  last two pictures; no blinks in turns, the horizon slides, shore lines reach the view edges.
+- Sharp text (S2.2, S2.4): menus, panel text, labels and the editor in a scalable font.
+- Vector cockpit (S2.1, S2.5-S2.19): every instrument, the right-hand panel, the radio stack and the panel
+  frame redrawn as vector modules from the game's values (`--module-off NAME|all`, `--module-outline`,
+  `--needle-width F`, `--dump-panel FILE`); see docs/PANEL.md.
+- Launcher `FS1 Enhanced.exe` (S5.2): disk image, start location, line width, smooth motion, RGB, sound.
+- `--start N`: recall user mode N once the start-up menus are over; F11 cycles sharp / composite / RGB.
+- `--record FILE`, `--record-from N`: write every frame to a 60 fps video through ffmpeg.

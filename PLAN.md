@@ -120,7 +120,7 @@ a time. Every module subtask: measure the layout from the clean panel (cseg:0122
 |---|---|---|---|---|
 | S5.1 | Settings and save state: `fs1.ini` (display mode, aspect, scale, audio, controls), F5/F9 quick save/load of the whole game state (memory array + registers) | S | M | |
 | S5.2 | Launcher "FS1 Enhanced" (required, like the other ports) from `../StreetRodEnhanced/launcher/` (wxWidgets), adapted: disk image instead of a game folder, all options of S1–S5.1 (palette, scaling, smooth frame rate, gamepad, audio), key bindings; no "classic" entry (D2); built by default, `-DFS1_LAUNCHER=OFF` to skip | S | M |partial 2026-10-04: `launcher/` (disk image, start location = user mode via `--start N`, line width, RGB, sound); the other options when their subtasks exist |
-| S5.3 | First release: `tools/package.py` (repo URL, launcher in the zip), README with screenshots taken by the user, CHANGELOG, make https://github.com/kylofon/fs1-enhanced public + GitHub release (user approves) | H | S | | done 2026-10-27: v0.1.0 released, repo public; README screenshots still to add |
+| S5.3 | First release: `tools/package.py` (repo URL, launcher in the zip), README with screenshots taken by the user, CHANGELOG, make https://github.com/kylofon/fs1-enhanced public + GitHub release (user approves) | H | S | done 2026-10-27: v0.1.0 released, repo public; README screenshots still to add |
 
 Notes:
 - Faithful ids: S1.1–S1.3 were S4.2–S4.4, S2.1–S2.2 were S4.5–S4.6, S3.1 was S4.7, S3.2 was S4.10,

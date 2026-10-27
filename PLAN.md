@@ -18,23 +18,11 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 
 | Task | What to do | For | Time |
 |---|---|---|---|
-| U1 | Cockpit follow-ups (first answer 2026-10-07, from a screenshot: the top-left corner under the view shows the ground down to the glareshield curve, whose edge is a staircase of pixel steps, not a curve; to fix in its own session: the frame module's glareshield curve as a smooth line, and the fill below the view bounded by that line instead of per-column steps): (1) in flight the sky and ground now continue behind the cockpit's top edge (the black strip under the view and the top-left corner above the glareshield curve; scenery objects are still clipped at the old view border); (2) the start-up menu screen shows the vector cockpit too. Rebuild, run next to `--classic`: look at the top-left corner of the panel in flight (horizon line crossing the gap, colours matching) and at the menu screens (A, B). Reply `OK` or what is wrong | follow-up | 3 min |
-| U1 | S2.14-S2.19 right panel and frame (throttle/flaps/trim strips, COMPASS + O M I lights, FUEL/OIL gauges, GEAR/LIGHTS/MAGS/CARB H, radio stack COM/NAV/TRANSPONDER/TIME, panel frame): close the game, `cmake --build build`, run next to `--classic` (`--module-off all` = old look, or by name, e.g. `--module-off frame`), take off, press G, L, H, A etc. and tune the radios: every value should show and change as in classic. Reply `OK` or what is wrong per part (missing/wrong text, sliders moving the wrong way, boxes, lines missing at the panel edges or between gauges) | S2.14-19 | 10 min |
-| U1 | S2.10-S2.13 bottom row (turn coordinator, heading indicator, VSI + elevator strip, tachometer): close the game, `cmake --build build`, run next to `--classic` (`--module-off turn,heading,vsi,tach` = old look), take off and fly: turn symbol tilts with the turn, ball moves; heading digits and the turning card; VSI needle, elevator marker, rudder marker/track at the bottom; tach needle. Reply `OK` or what is wrong per gauge (scale positions, directions, sizes, overlaps, anything missing) | S2.10-13 | 8 min |
-| U1 | S2.9 OMI/VOR indicator: close the game, `cmake --build build`, run next to `--classic` (`--module-off omi` = old look), tune a NAV station (or just fly): ring and card, course needle, glide-slope bar, OFF/TO/FROM, the OBS course (3 digits above the card) and its reciprocal (below); the O/M/I lights are now in the COMPASS box. Reply `OK` or what is wrong (needle/bar position and direction vs classic, flag text, number positions) | S2.9 | 5 min |
-| U1 | S2.8 altimeter: close the game, `cmake --build build`, run next to `--classic` (`--module-off altimeter` = old look), take off and climb: ring, 50 ticks, numerals 0-9, ALT, long hand (1000 ft/turn) and short thick hand (10000 ft/turn). Reply `OK` or what is wrong (hand angles vs classic, sizes, the small boxed label in the old dial that is NOT redrawn, see notes) | S2.8 | 3 min |
-| U1 | S2.7 attitude indicator: close the game, `cmake --build build`, run next to `--classic` (`--module-off attitude` = old look), take off and bank/pitch (keys, or `--poke` in a test run): sky/ground split with a smooth horizon, bank pointer on the disc, fixed roll ticks on the ring, aircraft symbol. Reply `OK` or what is wrong (horizon position or tilt direction vs classic, which side is sky, pointer direction, sizes, colours) | S2.7 | 3 min |
-| U1 | S2.6 airspeed module (numbers 15% smaller after your first look): close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` next to `--classic` (`--module-off airspeed` shows the old look), take off (A, B at the menus, F2) and watch the airspeed dial (left): ring, ticks every 10 kt, numbers 40-200, KNOTS, needle. Reply `OK` or what is wrong (needle angle vs the numbers, size/overlap of the numbers, ring, colours, gaps in the glareshield line above) | S2.6 | 3 min |
-| U1 | S2.4 sharp panel labels: close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` next to `--classic`, take off (A, B at the menus) and look at the panel labels (COMPASS, FUEL, OIL, COM, NAV, TRANSPONDER, TIME, KNOTS, GEAR/LIGHTS/MAGS/CARB, gauge numerals): they should be crisp white strokes, same letters and place as classic, no leftover coloured dots. Reply `OK` or what is wrong (missing/odd letters, too thin, colour) | S2.4 | 3 min |
-| U1 | S1.3 + S2.2 result 2026-10-06: menus and 3D graphics OK. Cockpit: values sharp, labels not (= S2.4), some values broken (right-hand panel column GEAR/LIGHTS/MAGS/CARB shows `bc`, `f g`, `l`; `yyy` under OMI; check heading `330`). Next session: fix broken values (S2.2 bug), then S2.4. Send a `--classic` screenshot of the same frame if the broken values differ from it | S2.2 | 3 min |
-| U1 | S2.2 sharp text (re-check after the fix): close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` next to `--classic` and look at the start-up menus, the flight status/radio text and the editor screens: the letters should be smooth at any window size, same colour and place as classic. Reply `OK` or what is wrong (blurry/missing letters, leftover pixel letters, wrong colour, text that does not vanish when the game erases it) | S2.2 | 5 min |
-| U1 | S2.1 sharp panel needles: close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` next to `--classic`, take off (A, B at the menus, F2 for throttle) and watch the airspeed, altimeter (both hands), VSI and tachometer needles; or open `work\sharp_p.bmp` vs `work\classic_p.bmp` (frame 900 on the runway). Reply `OK` or what is wrong (needle position/length, thickness: `--needle-width F`, colour, flicker, leftover pixel needles) | S2.1 | 5 min |
-| U1 | S1.3 sharp 3D view: close the running game, `cmake --build build`, run `build/fs1-enhanced.exe` (sharp is the default) next to `--classic`, fly (A, B at the menus) and compare the 3D view; or open `work\sharp_650.bmp` vs `work\classic_650.bmp`. Reply `OK` or what is wrong and where (colours, line thickness `--line-width N`, runway/ground fills, blurry patches) | S1.3 | 5 min |
 
 ## Status
 
-- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3 (U1 pending), S2.1 (U1 pending), S2.2 (U1 pending), S2.4 (U1 pending), S2.5, S2.6 (U1 pending), S2.7 (U1 pending), S2.8 (U1 pending), S2.9 (U1 pending), S2.10-S2.19 (U1 pending), S3.2 (U1 OK), S3.3 (dropped).
-- **Next:** U1 checks (rows at the top); then Phase 4 (S4.1).
+- **Done:** S0.1 (repo from the faithful port v0.1.0; `--classic`; verification gate OK), S1.1 (`docs/RENDER.md`), S1.2, S1.3, S2.1, S2.2, S2.4, S2.5, S2.6-S2.19 (U1 OK 2026-10-19), S3.2 (U1 OK), S3.3 (dropped).
+- **Next:** S5.3 first release (v0.1.0); S3.4 parked.
 - Escalation rule: a subtask that fails twice on Sonnet → new Opus session with a 5-line note
   (symptom, file, what was tried). Never carry an old transcript over.
 
@@ -58,7 +46,7 @@ remove it when it is done; subtasks marked `U<n> pending` are added automaticall
 ## Subtasks
 
 Model: H = Haiku 4.5, S = Sonnet 5.5, O = Opus 5.5. Size: rough session length (S/M/L).
-Status goes in the row's last cell (`done YYYY-MM-DD`, `U1 pending`); longer notes go in the "Notes:"
+Status goes in the row's last cell (`done YYYY-MM-DD`, `U1 OK 2026-10-19`); longer notes go in the "Notes:"
 list under each table, never between rows.
 
 Rendering today: the natives draw into the 640×200 CGA bitmap, which is decoded to composite colour and
@@ -76,15 +64,15 @@ window size. The CGA path stays as the authentic mode (`--classic`, or toggled i
 |---|---|---|---|---|
 | S1.1 | Design: display-list format and recording points in the natives (`raster.h` lines, `fill_rows`/horizon, `textdraw.h`, `panel.h` sprites/needles, scenery dots); sub-pixel coordinates from the projection before rounding; `docs/RENDER.md`; no code beyond a skeleton in `src/enhanced/` | O | M | done 2026-10-03 |
 | S1.2 | 3D view display list: record scenery lines/dots/polygons and horizon with float coordinates; `--dump-dl` to a text file per frame for checks | S | M | done 2026-10-03 |
-| S1.3 | SDL back end for the 3D view: lines (`SDL_RenderLines`, thickness option), filled sky/ground and polygons (`SDL_RenderGeometry`), slightly richer palette than the 4 composite colours (minor adjustments for clarity only, D1); toggle authentic/sharp (F11 cycles with composite/RGB); **U1 check** | S | M | done 2026-10-03, U1 pending |
+| S1.3 | SDL back end for the 3D view: lines (`SDL_RenderLines`, thickness option), filled sky/ground and polygons (`SDL_RenderGeometry`), slightly richer palette than the 4 composite colours (minor adjustments for clarity only, D1); toggle authentic/sharp (F11 cycles with composite/RGB); **U1 check** | S | M | done 2026-10-03, U1 OK 2026-10-19 |
 
 ### Phase 2 — Panel and text
 | Id | Task | Model | Size | Status |
 |---|---|---|---|---|
-| S2.1 | Instrument panel at high resolution: needles as lines/polygons, indicators and sprites upscaled or vector-traced from the original sprite data; **U1 check** | S | L | done 2026-10-04, U1 pending |
-| S2.2 | Text at high resolution: the 16×5 game font rendered as scalable glyphs (vector from the font bits), panel and menu text; editor text mode with a sharp font | S | M | done 2026-10-04, U1 pending |
+| S2.1 | Instrument panel at high resolution: needles as lines/polygons, indicators and sprites upscaled or vector-traced from the original sprite data; **U1 check** | S | L | done 2026-10-04, U1 OK 2026-10-19 |
+| S2.2 | Text at high resolution: the 16×5 game font rendered as scalable glyphs (vector from the font bits), panel and menu text; editor text mode with a sharp font | S | M | done 2026-10-04, U1 OK 2026-10-19 |
 | S2.3 | Artificial horizon at high resolution (`gauges.c` `attitude`: row records DS:1BAB, spans 293F, bank dots 5B88/2A3E): sub-pixel horizon line between the sky and ground colours, bank pointer; read the state like S2.1 (section 6b), verify against the video RAM; **U1 check** | S | M | superseded by S2.7 |
-| S2.4 | Panel labels (COMPASS, FUEL, OIL, COM, NAV, TRANSPONDER, TIME, KNOTS, gauge numerals, GEAR/LIGHTS/MAGS/CARB) at high resolution, like S2.2: they are part of the panel bitmap (not the game font), so find them in the clean panel image (segment at 0000:0122) or from the panel art data, identify each character (own small glyph set of the panel font, or trace), redraw crisp in white/their colour with the 8x8-style font, remove the pixel/fringe version from the CGA copy; text only, gauge faces and scales stay | S | M | done 2026-10-06, U1 pending |
+| S2.4 | Panel labels (COMPASS, FUEL, OIL, COM, NAV, TRANSPONDER, TIME, KNOTS, gauge numerals, GEAR/LIGHTS/MAGS/CARB) at high resolution, like S2.2: they are part of the panel bitmap (not the game font), so find them in the clean panel image (segment at 0000:0122) or from the panel art data, identify each character (own small glyph set of the panel font, or trace), redraw crisp in white/their colour with the 8x8-style font, remove the pixel/fringe version from the CGA copy; text only, gauge faces and scales stay | S | M | done 2026-10-06, U1 OK 2026-10-19 |
 
 ### Phase 2b — Cockpit, module by module
 Change of approach (2026-10-06, after the S2.4 U1 look: letter-by-letter tracing gives an inconsistent
@@ -98,20 +86,20 @@ a time. Every module subtask: measure the layout from the clean panel (cseg:0122
 | Id | Task | Model | Size | Status |
 |---|---|---|---|---|
 | S2.5 | Module framework (`src/enhanced/panel/`): module registry (rect in hi-res pixels/scan lines, enable flag, `--module-off NAME`), blank the rect in the CGA copy, a vector kit (circle/arc, ticks along an arc, filled boxes, lines), one panel font (vector or 8x8-based, any size/rotation, white + panel colours from the composite decode), shared palette; measure and list every module rect (`docs/PANEL.md`); no module drawn yet beyond a debug outline (`--module-outline`) | O | M | done 2026-10-06, U1 OK 2026-10-06 |
-| S2.6 | Airspeed indicator (KNOTS, 40-200 scale, needle) | S | M | done 2026-10-06, U1 pending |
-| S2.7 | Attitude indicator (replaces S2.3: sky/ground split with sub-pixel horizon, bank marks and pointer, aircraft symbol) | S | M | done 2026-10-06, U1 pending |
-| S2.8 | Altimeter (ALT, 0-9 scale, both hands, the small 100s/1000s window) | S | M | done 2026-10-06, U1 pending |
+| S2.6 | Airspeed indicator (KNOTS, 40-200 scale, needle) | S | M | done 2026-10-06, U1 OK 2026-10-19 |
+| S2.7 | Attitude indicator (replaces S2.3: sky/ground split with sub-pixel horizon, bank marks and pointer, aircraft symbol) | S | M | done 2026-10-06, U1 OK 2026-10-19 |
+| S2.8 | Altimeter (ALT, 0-9 scale, both hands, the small 100s/1000s window) | S | M | done 2026-10-06, U1 OK 2026-10-19 |
 | S2.9 | OMI/VOR indicator (OBS card, CDI bar, TO/FROM, the 3-digit OBS window, bottom heading box) | S | M | |
-| S2.10 | Turn coordinator (L/R marks, aircraft symbol, ball/inclinometer box) | S | M  done 2026-10-06, U1 pending |
-| S2.11 | Heading indicator (DG card numerals, lubber line, digital heading box) | S | M  done 2026-10-06, U1 pending |
-| S2.12 | Vertical speed indicator (UP/DN, 5/10/15 scale, needle) and the elevator trim strip next to it | S | M  done 2026-10-06, U1 pending |
-| S2.13 | Tachometer (RPM, 5-35 scale, needle) | S | S  done 2026-10-06, U1 pending |
-| S2.14 | Throttle/flaps strip (F/L/D/T column left of COMPASS: markers and bar) | S | S |done 2026-10-06, U1 pending |
-| S2.15 | COMPASS box (magnetic heading digits) (the O/M/I lights are in the OMI module, done in S2.9) | S | S |done 2026-10-06, U1 pending |
-| S2.16 | FUEL (two E-F gauges), OIL T and OIL P gauges | S | S |done 2026-10-06, U1 pending |
-| S2.17 | GEAR / LIGHTS / MAGS / CARB H status column (labels + switch symbols, drawn as clear states, not the game's symbol glyphs) | S | S |done 2026-10-06, U1 pending |
-| S2.18 | Radio stack: COM, NAV, TRANSPONDER, TIME boxes (labels, frames, digits in one font) | S | S |done 2026-10-06, U1 pending |
-| S2.19 | Panel frame: glareshield edge, instrument bezels between modules, separators, the small knobs; then the whole panel without any CGA pixels left | S | M |done 2026-10-06, U1 pending |
+| S2.10 | Turn coordinator (L/R marks, aircraft symbol, ball/inclinometer box) | S | M  done 2026-10-06, U1 OK 2026-10-19 |
+| S2.11 | Heading indicator (DG card numerals, lubber line, digital heading box) | S | M  done 2026-10-06, U1 OK 2026-10-19 |
+| S2.12 | Vertical speed indicator (UP/DN, 5/10/15 scale, needle) and the elevator trim strip next to it | S | M  done 2026-10-06, U1 OK 2026-10-19 |
+| S2.13 | Tachometer (RPM, 5-35 scale, needle) | S | S  done 2026-10-06, U1 OK 2026-10-19 |
+| S2.14 | Throttle/flaps strip (F/L/D/T column left of COMPASS: markers and bar) | S | S |done 2026-10-06, U1 OK 2026-10-19 |
+| S2.15 | COMPASS box (magnetic heading digits) (the O/M/I lights are in the OMI module, done in S2.9) | S | S |done 2026-10-06, U1 OK 2026-10-19 |
+| S2.16 | FUEL (two E-F gauges), OIL T and OIL P gauges | S | S |done 2026-10-06, U1 OK 2026-10-19 |
+| S2.17 | GEAR / LIGHTS / MAGS / CARB H status column (labels + switch symbols, drawn as clear states, not the game's symbol glyphs) | S | S |done 2026-10-06, U1 OK 2026-10-19 |
+| S2.18 | Radio stack: COM, NAV, TRANSPONDER, TIME boxes (labels, frames, digits in one font) | S | S |done 2026-10-06, U1 OK 2026-10-19 |
+| S2.19 | Panel frame: glareshield edge, instrument bezels between modules, separators, the small knobs; then the whole panel without any CGA pixels left | S | M |done 2026-10-06, U1 OK 2026-10-19 |
 
 ### Phase 3 — View
 | Id | Task | Model | Size | Status |

@@ -57,7 +57,9 @@ typedef struct DlItem {
     union {
         struct { DlPt a, b; } line;                              /* DL_LINE, DL_DOT (a) */
         struct { float x, y, w, h; } rect;                       /* DL_FILL, DL_RESTORE */
-        struct { DlPt a, b; uint16_t pat_l, pat_r; } sky;        /* DL_SKYGROUND */
+        struct { DlPt a, b; uint16_t pat_l, pat_r; DlPt a0, b0; bool lerp; } sky; /* DL_SKYGROUND; S3.2: lerp = its vertices are not
+                                                       those of the last frame (the horizon's pair of far points changed
+                                                       with the heading): the line moves on the screen from a0->b0 */
         struct { uint16_t first, count, rings; uint8_t x0, y0, x1, y1; uint16_t e_from, e_to; int8_t wind; } poly; /* DL_POLY: vertices in
                                                        DlFrame.verts; its outline lines are items e_from..e_to-1;
                                                        wind: side a clipped outline is closed along the border

@@ -104,6 +104,7 @@ static bool chk_atexit_set;
 static struct { uint32_t frame; int x0, y0, x1, y1, changed; float area; } chk_poly[8];
 static int chk_poly_n, chk_poly_total, chk_poly_all;
 static int chk_unfilled_vis; /* polygons whose flood fill filled nothing although their outline is on screen */
+static int chk_kept;         /* polygons not filled by the game, closed with the last frame's winding */
 static struct { uint32_t frame; uint16_t pat; uint8_t col; int px; } chk_unf[6];
 
 static void sm_report(void);
@@ -115,7 +116,8 @@ static void chk_report(void)
     sm_report();
     if (!chk_n_pairs)
         fprintf(stderr, "dl-check: every back-buffer write was recorded\n");
-    fprintf(stderr, "dl-check: %d polygons with a visible outline were not filled by the game\n", chk_unfilled_vis);
+    fprintf(stderr, "dl-check: %d polygons with a visible outline were not filled by the game (%d more were filled with "
+                    "the last frame's winding)\n", chk_unfilled_vis, chk_kept);
     for (int i = 0; i < chk_unfilled_vis && i < 6; i++)
         fprintf(stderr, "dl-check:   frame %u: %d outline pixels, fill pattern %04X, colour %02X\n", chk_unf[i].frame, chk_unf[i].px,
                 chk_unf[i].pat, chk_unf[i].col);
@@ -1109,6 +1111,29 @@ static void rings_size(const DlFrame *f, int first, int count, float *area, floa
     }
 }
 
+/* The winding of the same polygon (an outline vertex with the same scenery key) in the last committed frame, 0 when
+ * it was not filled there. */
+static int8_t prev_wind(const DlFrame *f, int e_from, int e_to)
+{
+    uint64_t key = 0;
+    for (int i = e_from; i < e_to && !key; i++)
+        if (f->items[i].kind == DL_LINE && (f->items[i].flags & DL_F_EDGE) && f->items[i].va >= 0)
+            key = f->vtx[f->items[i].va].key;
+    const DlFrame *p = &frames[building ^ 1];
+    if (!key || !committed)
+        return 0;
+    for (int i = 0; i < p->n_items; i++) {
+        const DlItem *it = &p->items[i];
+        if (it->kind != DL_POLY || !it->u.poly.wind)
+            continue;
+        for (int j = it->u.poly.e_from; j < it->u.poly.e_to && j < p->n_items; j++)
+            if (p->items[j].kind == DL_LINE && (p->items[j].flags & DL_F_EDGE) && p->items[j].va >= 0 &&
+                p->items[j].va < p->n_vtx && p->vtx[p->items[j].va].key == key)
+                return it->u.poly.wind;
+    }
+    return 0;
+}
+
 void dl_poly_end_(Pc *pc)
 {
     rej_flush();
@@ -1119,7 +1144,11 @@ void dl_poly_end_(Pc *pc)
         return;
     f->items[slot].u.poly.e_from = (uint16_t)poly_edges_from, f->items[slot].u.poly.e_to = (uint16_t)f->n_items;
     f->items[slot].colour = d8(pc, COLOUR_BYTE); /* S3.3: also for an empty one (its outline may be all outside) */
-    if (span_fills == 0) { /* the flood fill filled nothing (night, radar view, or a blocked seed) */
+    /* The flood fill filled nothing (night, radar view, or a blocked seed). A seed outside the polygon's part on
+     * the screen blinks it out for a frame: one filled in the last frame is closed with that frame's winding. */
+    int8_t keep_wind = span_fills == 0 ? prev_wind(f, poly_edges_from, f->n_items) : 0;
+    chk_kept += chk_on && keep_wind;
+    if (span_fills == 0 && !keep_wind) {
         if (chk_on) {
             int a, b, c, d, n = diff_pixels(pc, poly_snap, &a, &b, &c, &d);
             if (n > 0) {
@@ -1169,7 +1198,10 @@ void dl_poly_end_(Pc *pc)
             directed = false;
     int rings = -1;
     poly->u.poly.wind = 0;
-    if (directed) {
+    if (directed && keep_wind) {
+        poly->u.poly.wind = keep_wind;
+        rings = stitch_rings(f, seg, n_edges, keep_wind);
+    } else if (directed) {
         float bad[2];
         for (int w = 0; w < 2; w++) {
             int r = stitch_rings(f, seg, n_edges, w ? -1 : 1);
@@ -1182,7 +1214,7 @@ void dl_poly_end_(Pc *pc)
         }
     }
     if (rings < 0)
-        rings = build_rings(f, seg, n_edges);
+        rings = keep_wind ? 0 : build_rings(f, seg, n_edges);
     if (rings) {
         poly->u.poly.first = (uint16_t)first;
         poly->u.poly.count = (uint16_t)(f->n_verts - first);
@@ -1368,6 +1400,31 @@ static void match_vertices(Pc *pc, DlFrame *f)
     line_v[0] = line_v[1] = -1;
 }
 
+/* S3.2: a horizon drawn through other far points than in the last frame starts from the last frame's line. */
+static void sky_from_prev(DlFrame *f, const DlFrame *p)
+{
+    DlItem *it = NULL;
+    const DlItem *o = NULL;
+    for (int i = 0; i < f->n_items && !it; i++)
+        if (f->items[i].kind == DL_SKYGROUND)
+            it = &f->items[i];
+    for (int i = 0; committed && i < p->n_items && !o; i++)
+        if (p->items[i].kind == DL_SKYGROUND)
+            o = &p->items[i];
+    if (!it || !o)
+        return;
+    it->u.sky.lerp = false;
+    if (it->va >= 0 && it->vb >= 0 && (f->vtx[it->va].flags & f->vtx[it->vb].flags & DL_V_MATCHED))
+        return;
+    if (o->u.sky.pat_l == it->u.sky.pat_l && o->u.sky.pat_r == it->u.sky.pat_r)
+        it->u.sky.a0 = o->u.sky.a, it->u.sky.b0 = o->u.sky.b;
+    else if (o->u.sky.pat_l == it->u.sky.pat_r && o->u.sky.pat_r == it->u.sky.pat_l)
+        it->u.sky.a0 = o->u.sky.b, it->u.sky.b0 = o->u.sky.a; /* drawn the other way round */
+    else
+        return;
+    it->u.sky.lerp = true;
+}
+
 void dl_commit_view_(Pc *pc)
 {
     rej_flush();
@@ -1376,6 +1433,7 @@ void dl_commit_view_(Pc *pc)
     f->view_row = view_row_of(pc);
     f->number = frames[building ^ 1].number + 1;
     match_vertices(pc, f);
+    sky_from_prev(f, &frames[building ^ 1]);
     dump_frame(f);
     uint16_t seg = view_seg(pc); /* the blit copies [3802] words at [3808] and [3804] words at [380A] */
     for (int i = 0; i < 2; i++) {
@@ -1482,6 +1540,28 @@ static void sky_at(const DlFrame *f, DlItem *it)
         it->u.sky.a = a, it->u.sky.b = b;
 }
 
+/* The line a0->b0 turned and moved towards a->b on the screen (normal angle and distance from the view centre). */
+static bool line_nd(DlPt a, DlPt b, float *th, float *d)
+{
+    float dx = b.x - a.x, dy = b.y - a.y, l = sqrtf(dx * dx + dy * dy);
+    if (l < 1e-3f)
+        return false;
+    float nx = -dy / l, ny = dx / l;
+    *th = atan2f(ny, nx), *d = nx * (a.x - VIEW_W / 2.0f) + ny * (a.y - VIEW_H / 2.0f);
+    return true;
+}
+
+static void sky_lerp(DlItem *it, float s)
+{
+    float t0, d0, t1, d1;
+    if (!line_nd(it->u.sky.a0, it->u.sky.b0, &t0, &d0) || !line_nd(it->u.sky.a, it->u.sky.b, &t1, &d1))
+        return;
+    float dt = remainderf(t1 - t0, 2 * (float)M_PI), th = t0 + dt * s, d = d0 + (d1 - d0) * s;
+    float nx = cosf(th), ny = sinf(th), px = VIEW_W / 2.0f + d * nx, py = VIEW_H / 2.0f + d * ny;
+    it->u.sky.a = (DlPt){ px - 400 * ny, py + 400 * nx }; /* direction (ny, -nx) */
+    it->u.sky.b = (DlPt){ px + 400 * ny, py - 400 * nx };
+}
+
 /* A polygon again from its outline at the new positions (only when every edge has its vertices). */
 static void poly_at(DlFrame *f, DlItem *it)
 {
@@ -1541,6 +1621,9 @@ static const DlFrame *view_s(const DlFrame *f, float s)
             sky_at(l, it);
         }
     }
+    for (int i = 0; i < l->n_items; i++)
+        if (l->items[i].kind == DL_SKYGROUND && l->items[i].u.sky.lerp)
+            sky_lerp(&l->items[i], s);
     for (int i = 0; i < l->n_items; i++)
         if (l->items[i].kind == DL_POLY && !(l->items[i].flags & (DL_F_EMPTY | DL_F_LEAK)))
             poly_at(l, &l->items[i]);
@@ -1771,9 +1854,119 @@ static float dist_line(DlPt p, DlPt a, DlPt b) /* distance of p from the infinit
     return l < 1e-6f ? 0 : fabsf((p.x - a.x) * dy - (p.y - a.y) * dx) / l;
 }
 
+/* --dl-check: the view drawn at the interpolation steps of a frame into a raster of colour keys (fills, sky and
+ * ground, polygons; no lines; a leaked polygon's box is unknown); a step that changes far more pixels than the
+ * median step is a blink. Step 0 is the frame change (against the last frame's last step). */
+enum { FL_STEPS = 16 };
+#define FL_UNKNOWN 0xFFFFFFFFu
+static uint32_t fl_ras[2][VIEW_H][VIEW_W];
+static bool fl_have_prev;
+static long fl_blinks, fl_views;
+
+static void fl_span(uint32_t (*r)[VIEW_W], const DlPt *p, int n, uint32_t key)
+{
+    for (int y = 0; y < VIEW_H; y++) {
+        float yc = (float)y + 0.5f, xs[512];
+        int m = 0;
+        for (int i = 0; i < n && m < 512; i++) {
+            DlPt a = p[i], b = p[(i + 1) % n];
+            if ((a.y <= yc) != (b.y <= yc))
+                xs[m++] = a.x + (yc - a.y) * (b.x - a.x) / (b.y - a.y);
+        }
+        for (int i = 1; i < m; i++)
+            for (int j = i; j > 0 && xs[j] < xs[j - 1]; j--) {
+                float t = xs[j];
+                xs[j] = xs[j - 1], xs[j - 1] = t;
+            }
+        for (int i = 0; i + 1 < m; i += 2)
+            for (int x = (int)ceilf(fmaxf(xs[i] - 0.5f, 0)); x < VIEW_W && (float)x + 0.5f < xs[i + 1]; x++)
+                r[y][x] = key;
+    }
+}
+
+static void fl_raster(const DlFrame *f, uint32_t (*r)[VIEW_W])
+{
+    memset(r, 0, sizeof fl_ras[0]);
+    for (int i = 0; i < f->n_items; i++) {
+        const DlItem *it = &f->items[i];
+        if (it->kind == DL_POLY && (it->flags & DL_F_LEAK) && !(it->flags & DL_F_HIDDEN)) { /* drawn from the CGA picture */
+            for (int y = it->u.poly.y0; y <= it->u.poly.y1 && y < VIEW_H; y++)
+                for (int x = it->u.poly.x0 * 4; x < it->u.poly.x1 * 4 + 4 && x < VIEW_W; x++)
+                    r[y][x] = FL_UNKNOWN;
+            continue;
+        }
+        if (it->flags & (DL_F_HIDDEN | DL_F_EMPTY | DL_F_LEAK))
+            continue;
+        if (it->kind == DL_FILL) {
+            DlPt q[4] = { { it->u.rect.x, it->u.rect.y }, { it->u.rect.x + it->u.rect.w, it->u.rect.y },
+                          { it->u.rect.x + it->u.rect.w, it->u.rect.y + it->u.rect.h }, { it->u.rect.x, it->u.rect.y + it->u.rect.h } };
+            fl_span(r, q, 4, 0x10000u | it->colour);
+        } else if (it->kind == DL_SKYGROUND) {
+            DlPt a = it->u.sky.a, b = it->u.sky.b;
+            for (int y = 0; y < VIEW_H; y++)
+                for (int x = 0; x < VIEW_W; x++) {
+                    float c = (b.x - a.x) * ((float)y + 0.5f - a.y) - (b.y - a.y) * ((float)x + 0.5f - a.x);
+                    r[y][x] = 0x10000u | (c <= 0 ? it->u.sky.pat_l : it->u.sky.pat_r);
+                }
+        } else if (it->kind == DL_POLY) {
+            const DlPt *v = f->verts + it->u.poly.first;
+            for (int k = 0, from = 0; k <= it->u.poly.count; k++)
+                if (k == it->u.poly.count || isnan(v[k].x)) {
+                    if (k - from >= 3)
+                        fl_span(r, v + from, k - from, 0x20000u | (it->colour & 0xFF));
+                    from = k + 1;
+                }
+        }
+    }
+}
+
+static int fl_diff(uint32_t (*a)[VIEW_W], uint32_t (*b)[VIEW_W])
+{
+    int n = 0;
+    for (int y = 0; y < VIEW_H; y++)
+        for (int x = 1; x < VIEW_W - 1; x++)
+            n += a[y][x] != FL_UNKNOWN && b[y][x] != FL_UNKNOWN && a[y][x] != b[y][x];
+    return n;
+}
+
+static void flicker_check(const DlFrame *f)
+{
+    static int d[FL_STEPS + 1];
+    int cur = 0;
+    fl_views++;
+    for (int k = 0; k <= FL_STEPS; k++) {
+        const DlFrame *l = view_s(f, (float)k / FL_STEPS);
+        if (l == f)
+            return;
+        fl_raster(l, fl_ras[cur ^ 1]);
+        cur ^= 1;
+        /* step 0: the frame change, against the previous frame's last step */
+        d[k] = (k || fl_have_prev) ? fl_diff(fl_ras[cur ^ 1], fl_ras[cur]) : 0;
+    }
+    fl_have_prev = true;
+    /* the motion per step: the median of the steps inside the frame */
+    int s[FL_STEPS];
+    for (int k = 0; k < FL_STEPS; k++)
+        s[k] = d[k + 1];
+    for (int i = 1; i < FL_STEPS; i++)
+        for (int j = i; j > 0 && s[j] < s[j - 1]; j--) {
+            int t = s[j];
+            s[j] = s[j - 1], s[j - 1] = t;
+        }
+    int med = s[FL_STEPS / 2];
+    for (int k = 0; k <= FL_STEPS; k++)
+        if (d[k] > 4 * med + 60) {
+            fl_blinks++;
+            fprintf(stderr, "smooth: blink in frame %u at step %d/%d: %d px changed (median step %d)%s\n", f->number, k,
+                    FL_STEPS, d[k], med, k == 0 ? ", at the frame change" : "");
+        }
+}
+
 static void smooth_check(void)
 {
     const DlFrame *f = dl_view();
+    if (f && !f->incomplete && f->n_vtx)
+        flicker_check(f);
     gp_count = true;
     if (f && !f->incomplete && f->n_vtx && gap_s(f, 1.0f, VIEW_H - 2, VIEW_H + 12)) /* S3.3: the band of the stock corner */
         gp_frames++;
@@ -1817,6 +2010,8 @@ static void smooth_check(void)
 
 static void sm_report(void)
 {
+    if (fl_views)
+        fprintf(stderr, "smooth: %ld blinks in %ld frames (a step changing far more pixels than the motion)\n", fl_blinks, fl_views);
     if (gp_frames)
         fprintf(stderr, "gap: %ld frames, per frame %.1f lines in the band under the view (%.1f rejected by the game), "
                         "%ld of %ld polygons in it (not rebuilt: %ld without vertices, %ld drawn but not filled by the game, "
